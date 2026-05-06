@@ -1,0 +1,23 @@
+CMakeFiles/lvgl.dir/home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/lvgl_app/lvgl/src/misc/lv_utils.c.o: \
+ /home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/lvgl_app/lvgl/src/misc/lv_utils.c \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/stdc-predef.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/lib/gcc/aarch64-buildroot-linux-gnu/13.4.0/include/stddef.h \
+ /home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/lvgl_app/lvgl/src/misc/lv_utils.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/lib/gcc/aarch64-buildroot-linux-gnu/13.4.0/include/stdint.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/stdint.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/bits/libc-header-start.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/features.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/features-time64.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/bits/wordsize.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/bits/timesize.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/sys/cdefs.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/bits/long-double.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/gnu/stubs.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/gnu/stubs-lp64.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/bits/types.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/bits/typesizes.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/bits/time64.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/bits/wchar.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/bits/stdint-intn.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/bits/stdint-uintn.h \
+ /home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host/aarch64-buildroot-linux-gnu/sysroot/usr/include/bits/stdint-least.h

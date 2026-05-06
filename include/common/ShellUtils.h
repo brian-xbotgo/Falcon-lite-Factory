@@ -9,20 +9,19 @@
 namespace ft {
 
 struct ShellResult {
-    int         exit_code; //在这里初始化为exit_code不更好吗
+    int         exit_code = -1; 
     std::string output;
 };
 
 inline ShellResult shell_exec(const std::string& cmd) {
-    ShellResult result;                         // question1:有个疑问不用初始化吗
-    result.exit_code = -1;  
-    std::string full_cmd = cmd + " 2>&1";       // question2:为什么要2>&1
-    FILE* pipe = popen(full_cmd.c_str(), "r");  // popen和foepn区别在哪
+    ShellResult result;                         
+    std::string full_cmd = cmd + " 2>&1";       
+    FILE* pipe = popen(full_cmd.c_str(), "r");  
     if (!pipe) { result.output = "popen failed"; return result; }
-    std::array<char, 256> buf;
-    while (std::fgets(buf.data(), buf.size(), pipe)) result.output += buf.data();
+    std::array<char, 256> buf; 
+    while (std::fgets(buf.data(), buf.size(), pipe)) result.output += buf.data(); 
     int status = pclose(pipe);
-    if (WIFEXITED(status)) result.exit_code = WEXITSTATUS(status);
+    if (WIFEXITED(status)) result.exit_code = WEXITSTATUS(status); 
     else result.exit_code = -1;
     return result;
 }

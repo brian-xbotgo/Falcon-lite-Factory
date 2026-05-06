@@ -1,0 +1,6 @@
+/home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/Falcon_Air_F/build/CMakeFiles/lvgl.dir
+/home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/Falcon_Air_F/build/CMakeFiles/Falcon_Air_Factory.dir
+/home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/Falcon_Air_F/build/CMakeFiles/soc_test.dir
+/home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/Falcon_Air_F/build/CMakeFiles/factory_test_runner.dir
+/home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/Falcon_Air_F/build/CMakeFiles/edit_cache.dir
+/home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/Falcon_Air_F/build/CMakeFiles/rebuild_cache.dir
