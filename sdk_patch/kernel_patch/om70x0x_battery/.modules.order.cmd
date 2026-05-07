@@ -1,0 +1,1 @@
+cmd_/home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/sdk_patch/kernel_patch/om70x0x_battery/modules.order := {   echo /home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/sdk_patch/kernel_patch/om70x0x_battery/battery.ko; :; } > /home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/sdk_patch/kernel_patch/om70x0x_battery/modules.order

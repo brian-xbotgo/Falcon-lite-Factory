@@ -1,0 +1,444 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2025 Rockchip Electronics Co., Ltd.
+ */
+
+#include <dt-bindings/usb/pd.h>
+
+/dts-v1/;
+#include "rv1126b.dtsi"
+#include "rv1126b-evb.dtsi"
+#include "rv1126b-evb2-v10.dtsi"
+#include "rv1126b-falcon-air-dual-cam.dtsi"
+#include "falcon-air-motor.dtsi"
+
+/ {
+	model = "Rockchip RV1126B EVB2 V10 Board";
+	compatible = "rockchip,rv1126b-evb2-v10", "rockchip,rv1126b";
+
+    pdmics: dummy-codec {
+        status = "okay";
+        compatible = "rockchip,dummy-codec";
+        #sound-dai-cells = <0>;
+    };
+
+    pdm_mic_array: pdm-mic-array {
+        status = "okay";
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "rockchip,pdm-mic-array";
+        simple-audio-card,format = "pdm";
+
+        simple-audio-card,cpu {
+            sound-dai = <&pdm>;
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&pdmics>;
+        };
+    };
+};
+
+&pdm {
+    status = "okay";
+    rockchip,always-on;
+    rockchip,path-map = <0 1 2 3>;
+    pinctrl-names = "default";
+    pinctrl-0 = <&pdmm0_clk0_pins &pdmm0_sdi0_pins>;
+};
+
+&dsi {
+	status = "disabled";
+};
+
+&dsi_in_vop {
+	status = "disabled";
+};
+
+&gmac {
+	status = "disabled";
+};
+
+&rockchip_suspend {
+	status = "okay";
+
+	rockchip,sleep-mode-config = <
+		(0
+		| RKPM_SLP_ARMOFF_LOGOFF
+		| RKPM_SLP_PMU_PMUALIVE_32K
+		| RKPM_SLP_PMU_DIS_OSC
+		| RKPM_SLP_32K_EXT
+		| RKPM_SLP_LP_AOA
+		)
+	>;
+
+	rockchip,sleep-pin-config = <
+		(0
+		| RKPM_SLEEP_PIN0_EN
+		)
+		(0
+		| RKPM_SLEEP_PIN0_ACT_LOW
+		)
+	>;
+
+	rockchip,wakeup-config = <
+		(0
+		| RKPM_GPIO0_WKUP_EN
+		| RKPM_AAD_WKUP_EN
+		)
+	>;
+
+	rockchip,sleep-io-config = <
+		/* pmic_sleep */
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(0)
+		)
+		/* reset */
+		#if 0
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_NONE
+		| RKPM_IO_CFG_ID(1)
+		)
+		#endif
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(2)
+		)
+		(0
+		| RKPM_IO_CFG_PULL_NONE
+		| RKPM_IO_CFG_ID(3)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_UP
+		| RKPM_IO_CFG_ID(4)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(5)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(6)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_UP
+		| RKPM_IO_CFG_ID(7)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(8)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(9)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(10)
+		)
+		/* uart0 tx */
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(11)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(12)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(16)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(17)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_NONE
+		| RKPM_IO_CFG_ID(18)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_NONE
+		| RKPM_IO_CFG_ID(19)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(20)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(21)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(22)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(23)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(24)
+		)
+		(0
+		| RKPM_IO_CFG_IOMUX_GPIO
+		| RKPM_IO_CFG_GPIO_DIR_INPUT
+		| RKPM_IO_CFG_PULL_DOWN
+		| RKPM_IO_CFG_ID(25)
+		)
+	>;
+};
+
+/**************************************************************/
+/* LCD NV3007 */
+&spi0 {
+    status = "okay";
+    spi-max-frequency = <4000000>;
+    pinctrl-names = "default";
+    pinctrl-0 = <&spi0m2_clk_pins &spi0m2_csn0_pins>;
+
+    fbtft@0{
+        status = "okay";
+        compatible = "nv3007";
+        reg = <0>;
+        spi-max-frequency = <4000000>;
+        fps = <30>;
+        width = <428>;
+        height = <156>;
+        buswidth = <8>;
+        regwidth = <8>;
+        bpp = <16>;
+        debug = <0x4>;
+        dc-gpios = <&gpio5 RK_PA2 GPIO_ACTIVE_HIGH>;
+        reset-gpios = <&gpio5 RK_PB0 GPIO_ACTIVE_HIGH>;
+        backlight-gpios = <&gpio5 RK_PA0 GPIO_ACTIVE_HIGH>;
+    };
+};
+/**************************************************************/
+
+/**************************************************************/
+/* PD:husb311, charger:sc89890 */
+&pinctrl {
+    charger {
+		charger_ok: charger_ok {
+			rockchip,pins =
+					<5 RK_PB7 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+    };
+};
+
+&i2c2 {
+    status = "okay";
+    pinctrl-0 = <&i2c2m0_pins>;
+
+	sc89890: sc89890@6a {
+		compatible = "sc,sc89890";
+		reg = <0x6a>;
+		status = "okay";
+		pinctrl-names = "default";
+		pinctrl-0 = <&charger_ok>;
+		interrupt-parent = <&gpio5>;
+		interrupts = <RK_PC0 IRQ_TYPE_EDGE_FALLING>; /* IRQ_TYPE_LEVEL_LOW>;*/
+		sc,battery-regulation-voltage = <4350000>; /* 4.4V */
+		sc,charge-current = <4000000>; /* 4.0A */
+		sc,termination-current = <100000>;  /* 100mA */
+		sc,precharge-current = <500000>; /* 130mA */
+		sc,minimum-sys-voltage = <3400000>; /* 3V */
+		sc,boost-voltage = <5000000>; /* 5V */
+		sc,boost-max-current = <1600000>; /* 1600mA */
+
+		sc,thermal-regulation-threshold = <4000000>;
+
+		sc,ibatcomp-clamp-microvolt = <100000>;
+		sc,ibatcomp-micro-ohms = <20>;
+		// monitored-battery = <&bat>;
+		regulators {
+			// otg-en-gpios = <&gpio5 RK_PC1 GPIO_ACTIVE_HIGH>;
+			vbus5v0_typec: vbus5v0-typec {
+				regulator-compatible = "otg-vbus";
+				regulator-name = "vbus5v0_typec";
+				regulator-always-on;
+				regulator-boot-on;
+			};
+		};
+	};
+
+	usbc0: husb311@4e {
+		compatible = "hynetek,husb311";
+		reg = <0x4e>;
+		interrupt-parent = <&gpio0>;
+		interrupts = <RK_PC7 IRQ_TYPE_LEVEL_LOW>;
+		//pinctrl-names = "default";
+		//pinctrl-0 = <&usbc0_int>;
+		vbus-supply = <&vbus5v0_typec>;
+		status = "okay";
+
+		port {
+			usbc0_role_sw: endpoint {
+				remote-endpoint = <&usb_drd0_role_switch>;
+			};
+		};
+
+		usb_con: connector {
+			compatible = "usb-c-connector";
+			label = "USB-C";
+			data-role = "dual";
+			power-role = "dual";
+			try-power-role = "sink";
+			op-sink-microwatt = <1000000>;
+			sink-pdos =
+				<PDO_FIXED(5000, 1000, PDO_FIXED_USB_COMM)
+				PDO_FIXED(9000, 3000, PDO_FIXED_USB_COMM)
+				PDO_FIXED(12000, 3000, PDO_FIXED_USB_COMM)>;
+			source-pdos =
+				<PDO_FIXED(5000, 3000, PDO_FIXED_USB_COMM)>;
+
+			/*
+			altmodes {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				altmode@0 {
+					reg = <0>;
+					svid = <0xff01>;
+					vdo = <0xffffffff>;
+				};
+			};
+			*/
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					usbc0_orien_sw: endpoint {
+						remote-endpoint = <&usbdp_phy_orientation_switch>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+					dp_altmode_mux: endpoint {
+						remote-endpoint = <&usbdp_phy_dp_altmode_mux>;
+					};
+				};
+			};
+		};
+	};
+};
+
+&usb2phy {
+	status = "okay";
+	orientation-switch;
+	svid = <0xff01>;
+
+	port {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		usbdp_phy_orientation_switch: endpoint@0 {
+			reg = <0>;
+			remote-endpoint = <&usbc0_orien_sw>;
+		};
+
+		usbdp_phy_dp_altmode_mux: endpoint@1 {
+			reg = <1>;
+			remote-endpoint = <&dp_altmode_mux>;
+		};
+	};
+};
+
+&usb2phy_otg {
+	status = "okay";
+};
+
+&usb_drd_dwc3 {
+	dr_mode = "otg";
+	// usb-role-switch;
+
+    status = "okay";
+	port {
+		usb_drd0_role_switch: endpoint {
+			remote-endpoint = <&usbc0_role_sw>;
+		};
+	};
+};
+/**************************************************************/
+
+/**************************************************************/
+/* Gauge CW2215 sdasd*/
+
+&i2c5 {
+	status = "okay";
+	pinctrl-0 = <&i2c5m2_pins>;
+
+	cw221X@64 {
+		compatible = "cellwise,cw221X";
+		reg = <0x64>;
+		status = "okay";
+		cw,user_rsense = <10000>;
+		cellwise,battery-profile = /bits/ 8
+			<0x5A 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+			 0xB3 0xC0 0xB0 0xA9 0x99 0x97 0xF4 0xEE
+			 0xED 0xAE 0x9B 0x87 0x6F 0x58 0x4F 0x49
+			 0x44 0x42 0x3D 0x9B 0x9E 0xD2 0x82 0xEC
+			 0xCF 0x74 0x4D 0x46 0x85 0xC1 0xD3 0xCB
+			 0xBD 0xBB 0xBD 0xBA 0xC1 0xC6 0xC5 0xC0
+			 0xC3 0xCD 0xC1 0xCE 0xE4 0xE2 0xFF 0x91
+			 0x20 0x00 0xAB 0x10 0x02 0x90 0x64 0x00
+			 0x00 0x00 0x64 0xAB 0xB3 0x5E 0x00 0x00
+			 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x0D>;
+	};
+};
+
+/**************************************************************/
+/**************************************************************/
+/* KTH3601 hall*/
+&i2c0 {
+	status = "okay";
+};
+/**************************************************************/

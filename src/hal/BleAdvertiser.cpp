@@ -66,6 +66,7 @@ static const char* g_adv_xml =
     "    <method name='Release'/>"
     "    <property name='Type' type='s' access='read'/>"
     "    <property name='ServiceUUIDs' type='as' access='read'/>"
+    "    <property name='LocalName' type='s' access='read'/>"
     "    <property name='ManufacturerData' type='a{qv}' access='read'/>"
     "    <property name='Discoverable' type='b' access='read'/>"
     "  </interface>"
@@ -77,6 +78,12 @@ static GVariant* adv_get_prop(GDBusConnection*, const gchar*, const gchar*,
     if (!g_strcmp0(name, "Type"))           return g_variant_new_string("peripheral");
     if (!g_strcmp0(name, "ServiceUUIDs"))   return g_variant_new_strv(nullptr, 0);
     if (!g_strcmp0(name, "Discoverable"))   return g_variant_new_boolean(TRUE);
+    if (!g_strcmp0(name, "LocalName") && self->m_sn_valid) {
+        char name_buf[15];
+        memcpy(name_buf, self->m_sn, SN_LEN);
+        name_buf[SN_LEN] = '\0';
+        return g_variant_new_string(name_buf);
+    }
     if (!g_strcmp0(name, "ManufacturerData") && self->m_sn_valid) {
         GVariantBuilder ab;
         g_variant_builder_init(&ab, G_VARIANT_TYPE("ay"));
@@ -201,40 +208,56 @@ static void gatt_dispatch(GDBusConnection*, const gchar*, const gchar*,
 static void om_get_objects(GDBusConnection*, const gchar*, const gchar*,
                             const gchar*, const gchar*, GVariant*,
                             GDBusMethodInvocation* inv, gpointer) {
-    // Build leaf arrays first, then wrap in containing dicts.
-    // Each g_variant_builder_end() must finish before its result is used.
-    GVariantBuilder svc_arr;  // a{sv} for service properties
-    g_variant_builder_init(&svc_arr, G_VARIANT_TYPE("a{sv}"));
-    g_variant_builder_add(&svc_arr, "{sv}", "UUID", g_variant_new_string(SERVICE_UUID));
-    g_variant_builder_add(&svc_arr, "{sv}", "Primary", g_variant_new_boolean(TRUE));
-    GVariant* svc_props = g_variant_builder_end(&svc_arr);
+    // Build GATT object tree: a{oa{sa{sv}}}
+    // Service properties: a{sv}
+    GVariantBuilder svc_props;
+    g_variant_builder_init(&svc_props, G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_add(&svc_props, "{sv}", "UUID",
+        g_variant_new_string(SERVICE_UUID));
+    g_variant_builder_add(&svc_props, "{sv}", "Primary",
+        g_variant_new_boolean(TRUE));
+    GVariant* v_svc_props = g_variant_ref_sink(g_variant_builder_end(&svc_props));
 
-    GVariantBuilder chr_arr;  // a{sv} for characteristic properties
-    g_variant_builder_init(&chr_arr, G_VARIANT_TYPE("a{sv}"));
-    g_variant_builder_add(&chr_arr, "{sv}", "UUID", g_variant_new_string(CHAR_UUID));
-    g_variant_builder_add(&chr_arr, "{sv}", "Service", g_variant_new_string(APP_ROOT "/service00"));
+    // Characteristic properties: a{sv}
+    GVariantBuilder chr_props;
+    g_variant_builder_init(&chr_props, G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_add(&chr_props, "{sv}", "UUID",
+        g_variant_new_string(CHAR_UUID));
+    g_variant_builder_add(&chr_props, "{sv}", "Service",
+        g_variant_new_object_path(APP_ROOT "/service00"));
     const gchar* fl[] = {"write", "write-without-response", "read", NULL};
-    g_variant_builder_add(&chr_arr, "{sv}", "Flags", g_variant_new_strv(fl, -1));
-    GVariant* chr_props = g_variant_builder_end(&chr_arr);
+    g_variant_builder_add(&chr_props, "{sv}", "Flags",
+        g_variant_new_strv(fl, -1));
+    GVariant* v_chr_props = g_variant_ref_sink(g_variant_builder_end(&chr_props));
 
-    // Wrap each properties array into a{sa{sv}}
-    GVariantBuilder svc_if;  // a{sa{sv}}
+    // Interface dicts: a{sa{sv}}
+    GVariantBuilder svc_if;
     g_variant_builder_init(&svc_if, G_VARIANT_TYPE("a{sa{sv}}"));
-    g_variant_builder_add(&svc_if, "{sv}", "org.bluez.GattService1", svc_props);
-    GVariant* svc_entry = g_variant_builder_end(&svc_if);
+    g_variant_builder_add(&svc_if, "{sv}",
+        "org.bluez.GattService1",
+        g_variant_new_variant(v_svc_props));
 
-    GVariantBuilder chr_if;  // a{sa{sv}}
+    GVariantBuilder chr_if;
     g_variant_builder_init(&chr_if, G_VARIANT_TYPE("a{sa{sv}}"));
-    g_variant_builder_add(&chr_if, "{sv}", "org.bluez.GattCharacteristic1", chr_props);
-    GVariant* chr_entry = g_variant_builder_end(&chr_if);
+    g_variant_builder_add(&chr_if, "{sv}",
+        "org.bluez.GattCharacteristic1",
+        g_variant_new_variant(v_chr_props));
 
-    // Build root a{oa{sa{sv}}}
+    // Root: a{oa{sa{sv}}}
     GVariantBuilder root;
     g_variant_builder_init(&root, G_VARIANT_TYPE("a{oa{sa{sv}}}"));
-    g_variant_builder_add(&root, "{o@a{sa{sv}}}", APP_ROOT "/service00", svc_entry);
-    g_variant_builder_add(&root, "{o@a{sa{sv}}}", APP_ROOT "/service00/char0000", chr_entry);
+    g_variant_builder_add(&root, "{o@a{sa{sv}}}",
+        APP_ROOT "/service00",
+        g_variant_builder_end(&svc_if));
+    g_variant_builder_add(&root, "{o@a{sa{sv}}}",
+        APP_ROOT "/service00/char0000",
+        g_variant_builder_end(&chr_if));
+
     GVariant* r = g_variant_builder_end(&root);
     g_dbus_method_invocation_return_value(inv, g_variant_new("(@a{oa{sa{sv}}})", r));
+
+    g_variant_unref(v_svc_props);
+    g_variant_unref(v_chr_props);
 }
 
 static GDBusInterfaceVTable g_svc_vtable  = { nullptr, gatt_get_prop, nullptr, {}};

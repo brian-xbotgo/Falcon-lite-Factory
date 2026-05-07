@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2024 Luckfox Technology Co., Ltd.
+ *
+ */
+
+&spi1{
+        spi-max-frequency = <50000000>;
+        pinctrl-names = "default";
+        pinctrl-0 = <&spi1m2_clk_pins &spi1m2_csn0_pins>;
+        status = "okay";
+
+        spi_motor@0{
+                compatible = "xbotgo,spi_motor_tmi8152";
+                reg = <0>;
+                spi-max-frequency = <2000000>;
+		motor-gpios = <&gpio5 RK_PB5 GPIO_ACTIVE_HIGH>;
+                status = "okay";
+        };
+};

@@ -1,0 +1,1 @@
+cmd_/home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/sdk_patch/kernel_patch/om70x0x_battery/battery.mod := printf '%s\n'   om70x0x_battery.o | awk '!x[$$0]++ { print("/home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/sdk_patch/kernel_patch/om70x0x_battery/"$$0) }' > /home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/sdk_patch/kernel_patch/om70x0x_battery/battery.mod

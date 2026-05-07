@@ -1,0 +1,1 @@
+cmd_/home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/sdk_patch/kernel_patch/motor_tmi8152/motor_tmi8152.mod := printf '%s\n'   spi_motor_drv.o | awk '!x[$$0]++ { print("/home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/sdk_patch/kernel_patch/motor_tmi8152/"$$0) }' > /home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/sdk_patch/kernel_patch/motor_tmi8152/motor_tmi8152.mod

@@ -1,0 +1,1 @@
+cmd_/home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/sdk_patch/kernel_patch/motor_tmi8152/modules.order := {   echo /home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/sdk_patch/kernel_patch/motor_tmi8152/motor_tmi8152.ko; :; } > /home/gdh/Falcon_Air/XbotGo-Falcon-Air-Embedded/sdk_patch/kernel_patch/motor_tmi8152/modules.order
