@@ -42,11 +42,11 @@
 // ============================================================
 // Protocol constants (consistent with common/proto.hpp and factory_proto.md)
 // ============================================================
-static constexpr size_t PROTO_SN_LEN     = 16;
+static constexpr size_t PROTO_SN_LEN     = 14;
 static constexpr size_t PROTO_BIZID_LEN  = 16;
 static constexpr size_t PROTO_MSGID_LEN  = 8;
-static constexpr size_t PROTO_HEADER_LEN = PROTO_SN_LEN + PROTO_BIZID_LEN + PROTO_MSGID_LEN; // 40
-static constexpr size_t PROTO_RESP_LEN   = PROTO_HEADER_LEN + 4;  // 44
+static constexpr size_t PROTO_HEADER_LEN = PROTO_SN_LEN + PROTO_BIZID_LEN + PROTO_MSGID_LEN; // 38
+static constexpr size_t PROTO_RESP_LEN   = PROTO_HEADER_LEN + 4;  // 42
 
 static constexpr int MQTT_QOS = 2;
 

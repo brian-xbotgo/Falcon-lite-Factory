@@ -90,7 +90,7 @@ static uint32_t motor_mic_test(MotorDirection dir, const char* wav_path, float a
 
     MotorController::instance().start(dir, angle, MOTOR_SPEED_1_94_3, FORWARD);
 
-    std::string rec_cmd = std::string("arecord -D hw:0,0 -f S32_LE -r 48000 -c 2 -t wav -d 10 ") + wav_path;
+    std::string rec_cmd = std::string("arecord -D hw:1,0 -f S32_LE -r 48000 -c 2 -t wav -d 10 ") + wav_path;
     shell_exec(rec_cmd);
 
     motor_check_stopped(dir, 10, 1);

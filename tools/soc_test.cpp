@@ -5,7 +5,7 @@
 //
 // 连接到 MQTT broker，发送 12R 请求，等待 12A 响应，解析并打印各项测试结果。
 // 遵循 factory_proto 二进制协议:
-//   请求: 38 字节 (SN=16 + bizid=16 + msgid=8)
+//   请求: 38 字节 (SN=14 + bizid=16 + msgid=8)
 //   响应: 42 字节 (38 头 + 4 字节 error_code 大端序)
 
 #include <cstdio>
@@ -23,11 +23,11 @@
 // ============================================================
 // 协议常量 (与 common/proto.hpp 和 factory_proto.md 一致)
 // ============================================================
-static constexpr size_t PROTO_SN_LEN     = 16;
+static constexpr size_t PROTO_SN_LEN     = 14;
 static constexpr size_t PROTO_BIZID_LEN  = 16;
 static constexpr size_t PROTO_MSGID_LEN  = 8;
-static constexpr size_t PROTO_HEADER_LEN = PROTO_SN_LEN + PROTO_BIZID_LEN + PROTO_MSGID_LEN; // 40
-static constexpr size_t PROTO_RESP_LEN   = PROTO_HEADER_LEN + 4;  // 44 (factory_proto 定义 42, 此处对齐)
+static constexpr size_t PROTO_HEADER_LEN = PROTO_SN_LEN + PROTO_BIZID_LEN + PROTO_MSGID_LEN; // 38
+static constexpr size_t PROTO_RESP_LEN   = PROTO_HEADER_LEN + 4;  // 42
 
 // error_code 位定义 (与 soc.hpp 一致)
 static constexpr uint32_t ERR_GPU  = 0x0001;  // bit 0
@@ -172,7 +172,7 @@ static void print_result(const char* name, int bit, uint32_t error_code) {
 // 解析并打印错误码
 // ============================================================
 static int parse_and_print_error(const std::string& payload) {
-    // 从 offset 40 开始读取 4 字节 error_code (大端序)
+    // 从 offset 38 开始读取 4 字节 error_code (大端序)
     const auto* data = reinterpret_cast<const uint8_t*>(payload.data());
     uint32_t error_code = from_big_endian(data + PROTO_HEADER_LEN);
 

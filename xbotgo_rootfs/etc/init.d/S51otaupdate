@@ -1,0 +1,25 @@
+###
+ # @Author: brian-xbotgo hubiguang@xbotgo.com
+ # @Date: 2025-07-15 10:51:16
+ # @LastEditors: brian-xbotgo hubiguang@xbotgo.com
+ # @LastEditTime: 2025-08-28 13:40:59
+### 
+
+case "$1" in
+  start)
+        #/bin/updateEngine --misc=now &
+        /bin/bash /oem/usr/scripts/start_mqtt.sh &
+    	  #/bin/bash /etc/init.d/insmod_battery.sh &
+        /usr/bin/ota_update &
+        /bin/bash /etc/init.d/xbotgo_app_monitor.sh & 
+        ;;
+  stop)
+        printf "stop finished\n"
+        ;;
+  *)
+        echo "Usage: $0 {start|stop}"
+        exit 1
+        ;;
+esac
+exit 0
+

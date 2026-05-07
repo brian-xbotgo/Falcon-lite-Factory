@@ -10,7 +10,7 @@
 namespace ft {
 
 // ========= 协议常量 =========
-static constexpr size_t PROTO_SN_LEN     = 16;
+static constexpr size_t PROTO_SN_LEN     = 14;
 static constexpr size_t PROTO_BIZID_LEN  = 16;
 static constexpr size_t PROTO_MSGID_LEN  = 8;
 static constexpr size_t PROTO_HEADER_LEN = PROTO_SN_LEN + PROTO_BIZID_LEN + PROTO_MSGID_LEN;

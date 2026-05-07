@@ -1,0 +1,18 @@
+#!/bin/sh
+
+case "$1" in
+	start)
+		echo "Starting Dragonfly_lunch ..."
+		/bin/bash /oem/usr/scripts/Dragonfly_lunch.sh &
+		;;
+	stop)
+		echo "No stop operation for $0"
+		;;
+	*)
+		echo "Usage: $0 [start|stop]"
+		exit 1
+		;;
+esac
+
+exit 0
+

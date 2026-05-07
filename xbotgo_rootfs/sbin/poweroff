@@ -1,0 +1,8 @@
+#!/bin/sh
+
+CMD=$(basename $0)
+PARENT_PID=${PPID}
+PARENT_NAME=$(cat /proc/${PARENT_PID}/cmdline | tr '\0' ' ')
+echo "ppid=${PARENT_PID}, ppid_name=${PARENT_NAME} ${CMD}" > /dev/kmsg
+
+busybox ${CMD} "$@"

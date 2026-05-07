@@ -1,6 +1,6 @@
 // Mic test: 11R / 23R
 // Buzzer beep + arecord 5s → parse WAV for audio stats (peak / RMS)
-// Response: 44-byte protocol + 10-byte audio_stats (peak4 + rms4 + flags2 LE)
+// Response: 42-byte protocol + 10-byte audio_stats (peak4 + rms4 + flags2 LE)
 // error_code: bit0=set gain failed, bit1=arecord failed
 
 #include "tests/MicTest.h"
@@ -215,8 +215,8 @@ static void do_mic_test_raw(const ProtoHeader& hdr, TestEngine* engine,
     std::fprintf(stderr, "[mic] test done, sn=%s, err=0x%08X\n", hdr.sn, err);
 
 respond:
-    // Build response: 44-byte protocol + 10-byte audio stats
-    std::string proto_resp = hdr.build_response(err);  // 44 bytes
+    // Build response: 42-byte protocol + 10-byte audio stats
+    std::string proto_resp = hdr.build_response(err);  // 42 bytes
     std::string resp = proto_resp;
 
     // Append audio stats (10 bytes, little-endian)

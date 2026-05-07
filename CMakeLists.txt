@@ -6,9 +6,9 @@ set(CMAKE_C_STANDARD 17)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 
 # =================================================================
-# 0. LVGL library (built from source at ../lvgl_app/lvgl/)
+# 0. LVGL library (built from source in third_party/lvgl/)
 # =================================================================
-set(LVGL_DIR ${CMAKE_SOURCE_DIR}/../lvgl_app/lvgl)
+set(LVGL_DIR ${CMAKE_SOURCE_DIR}/third_party/lvgl)
 
 file(GLOB_RECURSE LVGL_SRCS ${LVGL_DIR}/src/*.c)
 # Exclude demo files (not present in this tree, but guard anyway)
