@@ -68,6 +68,10 @@ cp -f "$PROJECT_ROOT/commons/mosquitto/mosquitto.conf" "$rootfs_dst_dir/etc/"
 # --- Factory test binary ---
 cp -f "$SCRIPT_DIR/build/Falcon_Air_Factory" "$target_dir/bin/"
 
+# --- LVGL resources (fonts, images for factory display) ---
+mkdir -p "$target_dir/conf/lvgl_source/"
+cp -rf "$SCRIPT_DIR/firmware/lvgl_source/"* "$target_dir/conf/lvgl_source/"
+
 # --- Stress test tools (产测专属) ---
 cp -f "$SCRIPT_DIR/firmware/stress/gpu_test" "$target_dir/bin/"
 cp -f "$SCRIPT_DIR/firmware/stress/rknn_matmul_api_demo" "$target_dir/bin/"
