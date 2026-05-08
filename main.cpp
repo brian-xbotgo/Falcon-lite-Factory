@@ -50,7 +50,9 @@ int main() {
 
     // ---- Motor + Hall init ----
     ft::MotorController::instance().init();
-    hall_switch_init(HALL_UART_DEVICE);
+    if (hall_switch_init() != 0) {
+        std::fprintf(stderr, "[main] hall_switch_init failed, hall test will not work\n");
+    }
 
     // ---- LED GPIO init (for mic test buzzer) ----
     ft::GpioController::exportGpio(93);

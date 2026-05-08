@@ -10,13 +10,25 @@
 #include "common/Types.h"
 #include "hal/MotorController.h"
 #include "hal/HallSwitch.h"
+#include "hal/GpioController.h"
 #include <cstdio>
 #include <cmath>
 #include <chrono>
 #include <thread>
 #include <unistd.h>
+#include <atomic>
+#include <poll.h>
+#include <fcntl.h>
 
 namespace ft {
+
+// 垂直电机限位 GPIO
+constexpr int GPIO_HALL_UPPER_LIMIT = 181;
+constexpr int GPIO_HALL_LOWER_LIMIT = 182;
+
+// 21R 错误码（与老厂测一致）
+constexpr uint32_t ERR_V_TOP_HALL_FAIL = 0x0001; // bit0: 上限位未检测到
+constexpr uint32_t ERR_V_BOT_HALL_FAIL = 0x0002; // bit1: 下限位未检测到
 
 static float normalize_angle_360(float angle) {
     while (angle >= 360.0f) angle -= 360.0f;
@@ -31,14 +43,18 @@ static float angle_delta_180(float current, float last) {
     return d;
 }
 
-// Horizontal hall test: rotate 360°+ while sampling voltage
+// Horizontal hall test: rotate 360°+ while sampling magnetic field strength
 static int hall_test_360(MotorDirection dir, enum motor_speed_gear speed) {
-    constexpr float HALL_VOLTAGE_TOLERANCE = 0.005f;
-    constexpr int HALL_CALIBRATE_TIMEOUT_MS = 15000;
-    constexpr int HALL_CALIBRATE_MAX_SAMPLES = 500;
-    constexpr int SAMPLE_INTERVAL_MS = 30;
+    // 磁场强度阈值 (mT)，需根据实际磁铁和安装距离校准
+    constexpr float HALL_FIELD_MAX_MIN      = 20.0f;   // 峰值磁场最小值
+    constexpr float HALL_FIELD_VARIATION_MIN = 20.0f;   // 最大最小差值最小值
+    constexpr float HALL_INVALID_VALUE      = 9999.0f;  // 读取失败标记值
+    constexpr int   HALL_CALIBRATE_TIMEOUT_MS = 15000;
+    constexpr int   HALL_CALIBRATE_MAX_SAMPLES = 500;
+    constexpr int   SAMPLE_INTERVAL_MS = 30;
 
-    float max_voltage = 0.0f, min_voltage = 3.3f;
+    float max_field = 0.0f;
+    float min_field = 9999.0f;
     int sample_count = 0;
 
     float start_angle = normalize_angle_360(MotorController::instance().getPosition(dir));
@@ -67,11 +83,20 @@ static int hall_test_360(MotorDirection dir, enum motor_speed_gear speed) {
             }
         }
 
-        float voltage = hall_voltage_get();
+        float field = hall_value_get();
+        if (field >= HALL_INVALID_VALUE) {
+            // 读取失败，跳过本次采样
+            usleep(SAMPLE_INTERVAL_MS * 1000);
+            elapsed_ms += SAMPLE_INTERVAL_MS;
+            continue;
+        }
+
+        field = fabsf(field); // 磁场强度取绝对值
+
         if (sample_count < HALL_CALIBRATE_MAX_SAMPLES) {
             sample_count++;
-            if (voltage > max_voltage) max_voltage = voltage;
-            if (voltage < min_voltage) min_voltage = voltage;
+            if (field > max_field) max_field = field;
+            if (field < min_field) min_field = field;
         } else {
             break;
         }
@@ -82,72 +107,142 @@ static int hall_test_360(MotorDirection dir, enum motor_speed_gear speed) {
 
     MotorController::instance().stop(dir);
 
-    std::fprintf(stderr, "[hall] samples=%d, max=%.3fV, min=%.3fV\n",
-                 sample_count, max_voltage, min_voltage);
+    // 无有效采样
+    if (sample_count == 0) {
+        std::fprintf(stderr, "[hall] no valid samples\n");
+        return 2;
+    }
 
-    if (max_voltage < 2.0f - HALL_VOLTAGE_TOLERANCE) return 2;
-    if (min_voltage < 1.60f - HALL_VOLTAGE_TOLERANCE) return 3;
+    float variation = max_field - min_field;
+    std::fprintf(stderr, "[hall] samples=%d, max=%.2fmT, min=%.2fmT, variation=%.2fmT\n",
+                 sample_count, max_field, min_field, variation);
+
+    if (max_field < HALL_FIELD_MAX_MIN) return 2;          // bit2: 峰值磁场过弱
+    if (variation < HALL_FIELD_VARIATION_MIN) return 3;    // bit3: 磁场变化量不足
     return 0;
+}
+
+// ------------------------------------------------------------------
+// GPIO limit detection helper (for 21R vertical motor)
+// ------------------------------------------------------------------
+struct GpioLimit {
+    int gpio = -1;
+    int fd = -1;
+    std::atomic<bool> reached{false};
+    std::atomic<bool> stop{false};
+    std::thread thread;
+
+    GpioLimit() = default;
+    GpioLimit(const GpioLimit&) = delete;
+    GpioLimit& operator=(const GpioLimit&) = delete;
+
+    ~GpioLimit() {
+        stop.store(true);
+        if (thread.joinable()) thread.join();
+        if (fd >= 0) { ::close(fd); fd = -1; }
+        if (gpio >= 0) GpioController::unexport(gpio);
+    }
+};
+
+static void gpioPollThread(GpioLimit* limit) {
+    struct pollfd pfd;
+    pfd.fd = limit->fd;
+    pfd.events = POLLPRI | POLLERR;
+    char buf[8];
+
+    while (!limit->stop.load()) {
+        int ret = poll(&pfd, 1, 100);
+        if (ret > 0 && (pfd.revents & POLLPRI)) {
+            lseek(limit->fd, 0, SEEK_SET);
+            if (read(limit->fd, buf, sizeof(buf)) > 0) {
+                limit->reached.store(true);
+            }
+        }
+    }
+}
+
+static bool setupGpioLimit(GpioLimit& limit, int gpio) {
+    limit.gpio = gpio;
+    if (!GpioController::exportGpio(gpio)) {
+        std::fprintf(stderr, "[21R] export gpio %d failed\n", gpio);
+        return false;
+    }
+    if (!GpioController::setDirection(gpio, "in")) {
+        std::fprintf(stderr, "[21R] set gpio %d direction failed\n", gpio);
+        return false;
+    }
+    if (!GpioController::setEdge(gpio, "both")) {
+        std::fprintf(stderr, "[21R] set gpio %d edge failed\n", gpio);
+        return false;
+    }
+
+    std::string path = "/sys/class/gpio/gpio" + std::to_string(gpio) + "/value";
+    limit.fd = open(path.c_str(), O_RDONLY);
+    if (limit.fd < 0) {
+        std::fprintf(stderr, "[21R] open gpio %d value failed\n", gpio);
+        return false;
+    }
+
+    // clear pending interrupt
+    char buf[8];
+    lseek(limit.fd, 0, SEEK_SET);
+    read(limit.fd, buf, sizeof(buf));
+
+    limit.reached.store(false);
+    limit.stop.store(false);
+    limit.thread = std::thread(gpioPollThread, &limit);
+    return true;
 }
 
 void register_hall_tests(TestEngine& engine) {
 
-    // 21R: Vertical hall (upper/lower limit detection)
+    // 21R: Vertical hall (upper/lower limit detection via GPIO)
     engine.registerTest("21R", [](const ProtoHeader& hdr) -> uint32_t {
         uint32_t err = 0;
         MotorDirection dir = MOTOR_VERTICAL;
 
-        // Move down until limit (detect by position stall, timeout 10s)
-        float start_pos = MotorController::instance().getPosition(dir);
+        GpioLimit upperLimit;
+        GpioLimit lowerLimit;
+        if (!setupGpioLimit(upperLimit, GPIO_HALL_UPPER_LIMIT)) {
+            err |= ERR_V_TOP_HALL_FAIL;
+            return err;
+        }
+        if (!setupGpioLimit(lowerLimit, GPIO_HALL_LOWER_LIMIT)) {
+            err |= ERR_V_BOT_HALL_FAIL;
+            return err;
+        }
+
+        // --- Move down until lower limit ---
+        lowerLimit.reached.store(false);
         MotorController::instance().start(dir, 360.0f, MOTOR_SPEED_1_94_3, FORWARD);
 
-        int timeout = 100;
-        float last_pos = start_pos;
-        bool lower_detected = false;
-        while (timeout-- > 0) {
+        int timeout = 100; // 100 * 100ms = 10s
+        while (timeout-- > 0 && !lowerLimit.reached.load()) {
             usleep(100000);
-            float pos = MotorController::instance().getPosition(dir);
-            float d = pos - last_pos;
-            if (d < 0) d = -d;
-            if (d < 0.05f) {
-                lower_detected = true;
-                break;
-            }
-            last_pos = pos;
         }
         MotorController::instance().stop(dir);
 
-        if (lower_detected) {
+        if (lowerLimit.reached.load()) {
             std::fprintf(stderr, "[21R] bottom limit detected\n");
         } else {
-            err |= 0x0002;
+            err |= ERR_V_BOT_HALL_FAIL;
             std::fprintf(stderr, "[21R] bottom limit NOT detected\n");
         }
 
-        // Move up until limit
-        start_pos = MotorController::instance().getPosition(dir);
+        // --- Move up until upper limit ---
+        upperLimit.reached.store(false);
         MotorController::instance().start(dir, -360.0f, MOTOR_SPEED_1_94_3, BACK);
 
         timeout = 100;
-        last_pos = start_pos;
-        bool upper_detected = false;
-        while (timeout-- > 0) {
+        while (timeout-- > 0 && !upperLimit.reached.load()) {
             usleep(100000);
-            float pos = MotorController::instance().getPosition(dir);
-            float d = pos - last_pos;
-            if (d < 0) d = -d;
-            if (d < 0.05f) {
-                upper_detected = true;
-                break;
-            }
-            last_pos = pos;
         }
         MotorController::instance().stop(dir);
 
-        if (upper_detected) {
+        if (upperLimit.reached.load()) {
             std::fprintf(stderr, "[21R] top limit detected\n");
         } else {
-            err |= 0x0001;
+            err |= ERR_V_TOP_HALL_FAIL;
             std::fprintf(stderr, "[21R] top limit NOT detected\n");
         }
 
