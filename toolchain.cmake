@@ -1,7 +1,14 @@
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 
-set(TOOLCHAIN_DIR "$ENV{HOME}/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host")
+if(NOT DEFINED SDK_DIR)
+    set(SDK_DIR "$ENV{SDK_DIR}")
+endif()
+if(NOT SDK_DIR)
+    message(FATAL_ERROR "SDK_DIR not set. Usage: cmake -DSDK_DIR=/path/to/rv1126b_sdk ..")
+endif()
+
+set(TOOLCHAIN_DIR "${SDK_DIR}/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/host")
 
 set(CMAKE_C_COMPILER   "${TOOLCHAIN_DIR}/bin/aarch64-buildroot-linux-gnu-gcc")
 set(CMAKE_CXX_COMPILER "${TOOLCHAIN_DIR}/bin/aarch64-buildroot-linux-gnu-g++")

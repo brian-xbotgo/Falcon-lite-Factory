@@ -208,40 +208,35 @@ static void gatt_dispatch(GDBusConnection*, const gchar*, const gchar*,
 static void om_get_objects(GDBusConnection*, const gchar*, const gchar*,
                             const gchar*, const gchar*, GVariant*,
                             GDBusMethodInvocation* inv, gpointer) {
-    // Build GATT object tree: a{oa{sa{sv}}}
     // Service properties: a{sv}
-    GVariantBuilder svc_props;
-    g_variant_builder_init(&svc_props, G_VARIANT_TYPE("a{sv}"));
-    g_variant_builder_add(&svc_props, "{sv}", "UUID",
-        g_variant_new_string(SERVICE_UUID));
-    g_variant_builder_add(&svc_props, "{sv}", "Primary",
-        g_variant_new_boolean(TRUE));
-    GVariant* v_svc_props = g_variant_ref_sink(g_variant_builder_end(&svc_props));
+    GVariantBuilder sp;
+    g_variant_builder_init(&sp, G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_add(&sp, "{sv}", "UUID", g_variant_new_string(SERVICE_UUID));
+    g_variant_builder_add(&sp, "{sv}", "Primary", g_variant_new_boolean(TRUE));
+    GVariant* v_svc_props = g_variant_builder_end(&sp);
 
     // Characteristic properties: a{sv}
-    GVariantBuilder chr_props;
-    g_variant_builder_init(&chr_props, G_VARIANT_TYPE("a{sv}"));
-    g_variant_builder_add(&chr_props, "{sv}", "UUID",
-        g_variant_new_string(CHAR_UUID));
-    g_variant_builder_add(&chr_props, "{sv}", "Service",
-        g_variant_new_object_path(APP_ROOT "/service00"));
+    GVariantBuilder cp;
+    g_variant_builder_init(&cp, G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_add(&cp, "{sv}", "UUID", g_variant_new_string(CHAR_UUID));
+    g_variant_builder_add(&cp, "{sv}", "Service", g_variant_new_object_path(APP_ROOT "/service00"));
     const gchar* fl[] = {"write", "write-without-response", "read", NULL};
-    g_variant_builder_add(&chr_props, "{sv}", "Flags",
-        g_variant_new_strv(fl, -1));
-    GVariant* v_chr_props = g_variant_ref_sink(g_variant_builder_end(&chr_props));
+    g_variant_builder_add(&cp, "{sv}", "Flags", g_variant_new_strv(fl, -1));
+    GVariant* v_chr_props = g_variant_builder_end(&cp);
 
-    // Interface dicts: a{sa{sv}}
+    // Service 接口表: a{sa{sv}}
     GVariantBuilder svc_if;
     g_variant_builder_init(&svc_if, G_VARIANT_TYPE("a{sa{sv}}"));
-    g_variant_builder_add(&svc_if, "{sv}",
+    g_variant_builder_add(&svc_if, "{s@a{sv}}",
         "org.bluez.GattService1",
-        g_variant_new_variant(v_svc_props));
+        v_svc_props);
 
+    // Characteristic 接口表: a{sa{sv}}
     GVariantBuilder chr_if;
     g_variant_builder_init(&chr_if, G_VARIANT_TYPE("a{sa{sv}}"));
-    g_variant_builder_add(&chr_if, "{sv}",
+    g_variant_builder_add(&chr_if, "{s@a{sv}}",
         "org.bluez.GattCharacteristic1",
-        g_variant_new_variant(v_chr_props));
+        v_chr_props);
 
     // Root: a{oa{sa{sv}}}
     GVariantBuilder root;
@@ -252,12 +247,8 @@ static void om_get_objects(GDBusConnection*, const gchar*, const gchar*,
     g_variant_builder_add(&root, "{o@a{sa{sv}}}",
         APP_ROOT "/service00/char0000",
         g_variant_builder_end(&chr_if));
-
     GVariant* r = g_variant_builder_end(&root);
     g_dbus_method_invocation_return_value(inv, g_variant_new("(@a{oa{sa{sv}}})", r));
-
-    g_variant_unref(v_svc_props);
-    g_variant_unref(v_chr_props);
 }
 
 static GDBusInterfaceVTable g_svc_vtable  = { nullptr, gatt_get_prop, nullptr, {}};
