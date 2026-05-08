@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dpkg -l libmosquitto-dev)",
+      "Read(//usr/include/**)",
+      "Read(//home/gdh/RV1126B_LINUX6.1/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/host/bin/**)",
+      "Bash(g++ --version)",
+      "Bash(sudo apt-get *)",
+      "Bash(g++ -std=c++17 -Wall -Wextra -o build/factory_test_runner tools/factory_test_runner.cpp -lmosquitto -lpthread)",
+      "Bash(./build/factory_test_runner --help)",
+      "Bash(./build/factory_test_runner --list)"
+    ]
+  }
+}
