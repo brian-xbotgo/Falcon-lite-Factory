@@ -42,7 +42,7 @@ int main() {
 
     if (engine.startMqtt("prodTest") != 0) {
         std::fprintf(stderr, "[main] MQTT start failed\n");
-        return 1;
+        return -1;
     }
 
     // ---- LED thread ----
@@ -52,6 +52,7 @@ int main() {
     ft::MotorController::instance().init();
     if (hall_switch_init() != 0) {
         std::fprintf(stderr, "[main] hall_switch_init failed, hall test will not work\n");
+        return -1;
     }
 
     // ---- LED GPIO init (for mic test buzzer) ----

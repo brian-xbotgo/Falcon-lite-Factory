@@ -1,9 +1,9 @@
 // Hall test: 21R / 27R
 // 21R: vertical hall sensor test (upper/lower limit detection)
-// 27R: horizontal hall sensor test (360° voltage calibration)
+// 27R: horizontal hall sensor test (360° magnetic field strength calibration)
 //
 // 21R error_code: bit0=upper limit not detected, bit1=lower limit not detected
-// 27R error_code: bit0=hall not initialized, bit2=max voltage<2.0V, bit3=min voltage<1.6V
+// 27R error_code: bit0=hall not initialized, bit2=max field too weak, bit3=field variation too small
 
 #include "tests/HallTest.h"
 #include "core/TestEngine.h"
@@ -11,6 +11,7 @@
 #include "hal/MotorController.h"
 #include "hal/HallSwitch.h"
 #include "hal/GpioController.h"
+#include "iniparser.h"
 #include <cstdio>
 #include <cmath>
 #include <chrono>
@@ -30,6 +31,11 @@ constexpr int GPIO_HALL_LOWER_LIMIT = 182;
 constexpr uint32_t ERR_V_TOP_HALL_FAIL = 0x0001; // bit0: 上限位未检测到
 constexpr uint32_t ERR_V_BOT_HALL_FAIL = 0x0002; // bit1: 下限位未检测到
 
+// 27R hall_test_360 返回码
+constexpr int HALL_TEST_OK                = 0; // 测试通过
+constexpr int HALL_ERR_MAX_FIELD_WEAK     = 2; // bit2: 峰值磁场过弱
+constexpr int HALL_ERR_VARIATION_SMALL    = 3; // bit3: 磁场变化量不足
+
 static float normalize_angle_360(float angle) {
     while (angle >= 360.0f) angle -= 360.0f;
     while (angle < 0.0f)    angle += 360.0f;
@@ -45,13 +51,18 @@ static float angle_delta_180(float current, float last) {
 
 // Horizontal hall test: rotate 360°+ while sampling magnetic field strength
 static int hall_test_360(MotorDirection dir, enum motor_speed_gear speed) {
-    // 磁场强度阈值 (mT)，需根据实际磁铁和安装距离校准
-    constexpr float HALL_FIELD_MAX_MIN      = 20.0f;   // 峰值磁场最小值
-    constexpr float HALL_FIELD_VARIATION_MIN = 20.0f;   // 最大最小差值最小值
     constexpr float HALL_INVALID_VALUE      = 9999.0f;  // 读取失败标记值
     constexpr int   HALL_CALIBRATE_TIMEOUT_MS = 15000;
     constexpr int   HALL_CALIBRATE_MAX_SAMPLES = 500;
     constexpr int   SAMPLE_INTERVAL_MS = 30;
+
+    // 从 ini 读取阈值
+    dictionary* ini = iniparser_load("/userdata/hall_threshold.ini");
+    float max_field_min = (float)iniparser_getdouble(ini, "hall_threshold:max_field_min", 20.0);
+    float variation_min = (float)iniparser_getdouble(ini, "hall_threshold:variation_min", 20.0);
+    iniparser_freedict(ini);
+    std::fprintf(stderr, "[hall] thresholds: max_field_min=%.2f, variation_min=%.2f\n",
+                 max_field_min, variation_min);
 
     float max_field = 0.0f;
     float min_field = 9999.0f;
@@ -110,16 +121,16 @@ static int hall_test_360(MotorDirection dir, enum motor_speed_gear speed) {
     // 无有效采样
     if (sample_count == 0) {
         std::fprintf(stderr, "[hall] no valid samples\n");
-        return 2;
+        return HALL_ERR_MAX_FIELD_WEAK;
     }
 
     float variation = max_field - min_field;
     std::fprintf(stderr, "[hall] samples=%d, max=%.2fmT, min=%.2fmT, variation=%.2fmT\n",
                  sample_count, max_field, min_field, variation);
 
-    if (max_field < HALL_FIELD_MAX_MIN) return 2;          // bit2: 峰值磁场过弱
-    if (variation < HALL_FIELD_VARIATION_MIN) return 3;    // bit3: 磁场变化量不足
-    return 0;
+    if (max_field < max_field_min) return HALL_ERR_MAX_FIELD_WEAK;
+    if (variation < variation_min) return HALL_ERR_VARIATION_SMALL;
+    return HALL_TEST_OK;
 }
 
 // ------------------------------------------------------------------
@@ -201,13 +212,20 @@ void register_hall_tests(TestEngine& engine) {
         uint32_t err = 0;
         MotorDirection dir = MOTOR_VERTICAL;
 
+        // 从 ini 读取 GPIO 号
+        dictionary* ini = iniparser_load("/userdata/hall_threshold.ini");
+        int upper_gpio = iniparser_getint(ini, "hall_threshold:upper_limit_gpio", 181);
+        int lower_gpio = iniparser_getint(ini, "hall_threshold:lower_limit_gpio", 182);
+        iniparser_freedict(ini);
+        std::fprintf(stderr, "[21R] GPIO config: upper=%d, lower=%d\n", upper_gpio, lower_gpio);
+
         GpioLimit upperLimit;
         GpioLimit lowerLimit;
-        if (!setupGpioLimit(upperLimit, GPIO_HALL_UPPER_LIMIT)) {
+        if (!setupGpioLimit(upperLimit, upper_gpio)) {
             err |= ERR_V_TOP_HALL_FAIL;
             return err;
         }
-        if (!setupGpioLimit(lowerLimit, GPIO_HALL_LOWER_LIMIT)) {
+        if (!setupGpioLimit(lowerLimit, lower_gpio)) {
             err |= ERR_V_BOT_HALL_FAIL;
             return err;
         }
@@ -253,7 +271,7 @@ void register_hall_tests(TestEngine& engine) {
         return err;
     }, /*async=*/true);
 
-    // 27R: Horizontal hall (voltage sampling calibration)
+    // 27R: Horizontal hall (magnetic field strength sampling calibration)
     engine.registerTest("27R", [](const ProtoHeader& hdr) -> uint32_t {
         uint32_t err = 0;
 

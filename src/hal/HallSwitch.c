@@ -147,9 +147,40 @@ int hall_switch_init(void)
 
     g_hall_ctx.fd = fd;
 
-    // 退出当前模式
     struct i2c_msg msg;
     struct i2c_rdwr_ioctl_data msgset;
+
+    // 复位芯片
+    uint8_t reset_cmd = HALL_RESET_REG;
+    msg.addr = HALL_DEV_ADDR;
+    msg.flags = 0;
+    msg.len = 1;
+    msg.buf = &reset_cmd;
+
+    msgset.msgs = &msg;
+    msgset.nmsgs = 1;
+
+    int retry;
+    for (retry = 0; retry < 3; retry++) {
+        if (ioctl(fd, I2C_RDWR, &msgset) >= 0)
+            break;
+        if (retry < 2) {
+            log_warn("I2C_RDWR write 0x%02x failed (retry %d): %s\n",
+                     reset_cmd, retry + 1, strerror(errno));
+            usleep(100000);
+        }
+    }
+    if (retry >= 3) {
+        log_err("I2C_RDWR write 0x%02x failed after 3 retries: %s\n",
+                reset_cmd, strerror(errno));
+        close(fd);
+        g_hall_ctx.fd = -1;
+        return -1;
+    }
+    log_info("reset hall chip success.\n");
+    usleep(200000);
+
+    // 空闲模式
     uint8_t exit_cmd = HALL_EX_MODE_CMD_REG;
 
     msg.addr  = HALL_DEV_ADDR;
@@ -160,20 +191,29 @@ int hall_switch_init(void)
     msgset.msgs  = &msg;
     msgset.nmsgs = 1;
 
-    if (ioctl(fd, I2C_RDWR, &msgset) < 0) {
-        log_err("I2C_RDWR write 0x%02x failed: %s\n", exit_cmd, strerror(errno));
+    for (retry = 0; retry < 3; retry++) {
+        if (ioctl(fd, I2C_RDWR, &msgset) >= 0)
+            break;
+        if (retry < 2) {
+            log_warn("I2C_RDWR write 0x%02x failed (retry %d): %s\n",
+                     exit_cmd, retry + 1, strerror(errno));
+            usleep(100000);
+        }
+    }
+    if (retry >= 3) {
+        log_err("I2C_RDWR write 0x%02x failed after 3 retries: %s\n",
+                exit_cmd, strerror(errno));
         close(fd);
         g_hall_ctx.fd = -1;
         return -1;
     }
-
+    log_info("set hall chip enter idle mode success.\n");
     usleep(500000);
 
     // 连续感应模式
     uint8_t mode_reg = HALL_MODE_REG_ADDR;
     msg.buf = &mode_reg;
 
-    int retry;
     for (retry = 0; retry < 3; retry++) {
         if (ioctl(fd, I2C_RDWR, &msgset) >= 0)
             break;
@@ -190,7 +230,7 @@ int hall_switch_init(void)
         g_hall_ctx.fd = -1;
         return -1;
     }
-
+    log_info("set hall chip enter continue mode success.\n");
     usleep(200000);
 
     g_hall_ctx.is_initialized = true;

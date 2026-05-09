@@ -19,7 +19,7 @@ sdk_dir=${SDK_DIR%/}
 
 # --- 目标目录设置 ---
 target_dir=$sdk_dir/device/rockchip/common/extra-parts/oem/normal/usr
-userdata_dir=$sdk_dir/device/rockchip/common/extra-parts/userdata/normal
+userdata_dir=$sdk_dir/device/rockchip/common/extra-parts/userdata/testdata
 rootfs_dst_dir=$sdk_dir/buildroot/output/rockchip_rv1126b_ipc_64_evb1_v10/rockchip_rv1126b_ipc/target/
 rootfs_src_target=$SCRIPT_DIR/xbotgo_rootfs/
 
@@ -91,6 +91,10 @@ cp -f "$SCRIPT_DIR/usb_gadget/usb_config.sh" "$target_dir/scripts/"
 
 # Use factory lunch script as the boot entry point
 cp -f "$SCRIPT_DIR/firmware/Dragonfly_lunch_factory.sh" "$target_dir/scripts/Dragonfly_lunch.sh"
+
+# --- Hall test config ---
+cp -f "$SCRIPT_DIR/configs/hall_threshold.ini" "$userdata_dir/"
+echo ">>> Copied hall_threshold.ini to $userdata_dir"
 
 # --- Factory mode flag ---
 echo "" > "$userdata_dir/factory_mode"

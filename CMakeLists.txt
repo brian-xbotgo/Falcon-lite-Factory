@@ -44,6 +44,10 @@ set(FACTORY_SOURCES
     src/hal/MotorHal.c
     src/hal/HallSwitch.c
 
+    # INI parser (for threshold config)
+    commons/param/dictionary.c
+    commons/param/iniparser.c
+
     # Test modules
     src/tests/BatteryTest.cpp
     src/tests/CameraTest.cpp
@@ -69,6 +73,7 @@ target_include_directories(Falcon_Air_Factory PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party/lvgl       # lv_conf.h
     ${LVGL_DIR}                                  # lvgl.h
     ${CMAKE_SOURCE_DIR}/src/hal                  # for log.h used by MotorHal.c and HallSwitch.c
+    ${CMAKE_SOURCE_DIR}/commons/param            # for iniparser.h
 )
 
 target_link_directories(Falcon_Air_Factory PRIVATE

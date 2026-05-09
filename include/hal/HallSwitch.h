@@ -13,6 +13,7 @@ extern "C" {
 #define HALL_I2C_BUS         "/dev/i2c-0"
 #define HALL_DEV_ADDR        0x6A
 #define HALL_EX_MODE_CMD_REG 0x80
+#define HALL_RESET_REG       0xF0
 #define HALL_MODE_REG_ADDR   0x18
 #define HALL_READ_REG_ADDR   0x48
 #define READ_DATA_LEN        4
