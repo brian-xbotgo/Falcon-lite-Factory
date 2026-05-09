@@ -1,5 +1,5 @@
 // Aging test: 30R (full aging), 32R (motor aging), 34R (stop), 36R (fail)
-// Monitors WiFi/CAM, controls motors, sends recorder commands
+// Monitors WiFi/CAM, controls motors (recording/tracking decoupled from multi_media)
 // Uses JSON for aging result output
 
 #include "tests/AgingTest.h"
@@ -7,6 +7,7 @@
 #include "common/Types.h"
 #include "common/ShellUtils.h"
 #include "hal/MotorController.h"
+#include "hal/RecorderController.h"
 #include <nlohmann/json.hpp>
 #include <cstdio>
 #include <cstdlib>
@@ -56,16 +57,6 @@ static void save_result(const std::string& result, const std::string& reason) {
     }
 }
 
-// Inline recorder command packing (4 bytes: cmd, cmd_origin, ai_analyze_flag, elec_fences_flag)
-static std::string pack_recorder_cmd(uint8_t cmd_val) {
-    unsigned char buf[4];
-    buf[0] = cmd_val;
-    buf[1] = 0;
-    buf[2] = 0;
-    buf[3] = 0;
-    return std::string(reinterpret_cast<const char*>(buf), 4);
-}
-
 // ---- Motor aging threads ----
 static void aging_vertical_loop() {
     auto& g = globals();
@@ -112,11 +103,10 @@ static void stop_all_aging() {
     if (g_aging_v_motor_thread.joinable()) g_aging_v_motor_thread.join();
     if (g_aging_h_motor_thread.joinable()) g_aging_h_motor_thread.join();
 
-    std::system("killall battery-testaddbat.sh 2>/dev/null");
 }
 
 // ---- Aging main loop ----
-static void aging_main_loop(TestEngine* engine) {
+static void aging_main_loop() {
     auto& g = globals();
     unsigned int duration = 0;
     int aging_time = get_aging_time_seconds();
@@ -124,9 +114,7 @@ static void aging_main_loop(TestEngine* engine) {
     std::fprintf(stderr, "[aging] main loop start, target=%ds\n", aging_time);
     std::system("echo 2 > /userdata/aging_completed.txt");
 
-    std::system("mosquitto_pub -t \"track\" -f /oem/usr/bin/7.bin -q 2");
-
-    engine->publish("ALR", pack_recorder_cmd(0x00), 2);
+    RecorderController::instance().start();
 
     while (g.aging_test_start) {
         if (aging_time > 0 && (int)duration >= aging_time) {
@@ -161,15 +149,14 @@ static void aging_main_loop(TestEngine* engine) {
         duration += CHECK_INTERVAL;
     }
 
-    engine->publish("ALR", pack_recorder_cmd(0x03), 2);
-    std::system("mosquitto_pub -t \"track\" -f /oem/usr/bin/0.bin -q 2");
+    RecorderController::instance().stop();
     std::fprintf(stderr, "[aging] main loop exit\n");
 }
 
 void register_aging_tests(TestEngine& engine) {
 
     // 30R: Full aging test
-    engine.registerRaw("30R", [&engine](const uint8_t*, size_t) {
+    engine.registerRaw("30R", [](const uint8_t*, size_t) {
         auto& g = globals();
 
         set_led_mode(MODE_TEST);
@@ -177,10 +164,8 @@ void register_aging_tests(TestEngine& engine) {
         g.aging_test_start = true;
         g.aging_motor_test_start = true;
 
-        std::system("battery-testaddbat.sh &");
-
         if (g_aging_main_thread.joinable()) g_aging_main_thread.join();
-        g_aging_main_thread = std::thread([&engine] { aging_main_loop(&engine); });
+        g_aging_main_thread = std::thread(aging_main_loop);
 
         if (g_aging_v_motor_thread.joinable()) g_aging_v_motor_thread.join();
         g_aging_v_motor_thread = std::thread(aging_vertical_loop);

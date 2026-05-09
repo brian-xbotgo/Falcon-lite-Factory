@@ -44,7 +44,7 @@ static GVariant* advGetProperty(GDBusConnection*, const gchar*, const gchar*,
     }
 
     if (!g_strcmp0(name, "LocalName")) {
-        return g_variant_new_string(self->m_deviceInfo.getBleName());
+        return g_variant_new_string("Xbt-F-000000");
     }
 
     if (!g_strcmp0(name, "ManufacturerData")) {
@@ -111,8 +111,8 @@ int BleAdvertiser::run()
     m_factoryMode = true;
     LOG("BLE WiFi Config starting (factory mode)\n");
 
-    // 1. Init BLE name
-    const char* bleName = m_deviceInfo.getBleName();
+    // 1. Init BLE name (fixed "Xbt-F-" prefix for phone app discovery)
+    const char* bleName = "Xbt-F-000000";
     LOG("BLE name: %s\n", bleName);
     if (!m_factoryMode) m_deviceInfo.loadDeviceAlias();
 
@@ -360,9 +360,9 @@ gboolean BleAdvertiser::onUpdateManufacturerData(gpointer ud)
     GVariantBuilder props;
     g_variant_builder_init(&props, G_VARIANT_TYPE("a{sv}"));
 
-    // LocalName (always use BLE name from SSID, keeps "Xbt-F-" prefix)
+    // LocalName (fixed "Xbt-F-" prefix for phone app discovery)
     g_variant_builder_add(&props, "{sv}", "LocalName",
-                          g_variant_new_string(self->m_deviceInfo.getBleName()));
+                          g_variant_new_string("Xbt-F-000000"));
 
     // ManufacturerData
     GVariantBuilder ab;

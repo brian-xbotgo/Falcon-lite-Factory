@@ -6,7 +6,7 @@
 #include <mutex>
 #include <vector>
 #include "ble/BleConstants.h"
-#include "gimbal_mqtt_message.h"
+#include "ble/BleTypes.h"
 
 namespace ft {
 

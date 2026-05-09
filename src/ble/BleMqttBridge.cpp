@@ -82,21 +82,16 @@ void BleMqttBridge::onMessage(const mosquitto_message* msg)
 {
     if (!msg || !msg->payload) return;
 
-    // Handle factory test SN (10R, 31R)
+    const char* payload = (const char*)msg->payload;
+    int payloadlen = msg->payloadlen;
+
+    // Extract SN from any test command payload: first 14 bytes
+    // e.g. topic="17R", payload="11111111111111f648909b-af47-4419e0abfd" → SN="11111111111111"
     if (m_factoryMode && !m_snValid) {
-        if (strcmp(msg->topic, "10R") == 0 || strcmp(msg->topic, "31R") == 0) {
-            if (msg->payloadlen >= SN_LEN) {
-                memcpy(m_sn, msg->payload, SN_LEN);
-                m_snValid = true;
-                LOG("Got SN from %s: %.*s\n", msg->topic, SN_LEN, m_sn);
-            }
-            return;
-        }
-        // Also accept SN from any topic with 14+ bytes (fallback for factory test)
-        if (msg->payloadlen >= SN_LEN) {
-            memcpy(m_sn, msg->payload, SN_LEN);
+        if (payloadlen >= SN_LEN) {
+            memcpy(m_sn, payload, SN_LEN);
             m_snValid = true;
-            LOG("Got SN from %s: %.*s\n", msg->topic, SN_LEN, m_sn);
+            LOG("Got SN from [%s]: %.*s\n", msg->topic, SN_LEN, m_sn);
             return;
         }
     }
@@ -127,8 +122,8 @@ void BleMqttBridge::onConnect(int rc)
     mosquitto_subscribe(m_mosq, nullptr, MQTT_TOPIC_PHONE_CONNECT_STATUS, MQTT_QOS);
 
     if (m_factoryMode) {
-        mosquitto_subscribe(m_mosq, nullptr, "10R", MQTT_QOS);
-        mosquitto_subscribe(m_mosq, nullptr, "31R", MQTT_QOS);
+        // Subscribe to all topics — SN arrives with any test command
+        mosquitto_subscribe(m_mosq, nullptr, "#", MQTT_QOS);
     }
 
     LOG("MQTT connected, subscribed to topics\n");

@@ -59,11 +59,11 @@ make -C "$SCRIPT_DIR/src/ble" \
 cp -f "$SCRIPT_DIR/src/ble/ble_factory_advertise" "$target_dir/bin/"
 
 # --- Mosquitto ---
-cp -f "$PROJECT_ROOT/commons/mosquitto/out/sbin/mosquitto" "$rootfs_dst_dir/usr/bin/"
-cp -f "$PROJECT_ROOT/commons/mosquitto/out/bin/mosquitto_pub" "$rootfs_dst_dir/usr/bin/"
-cp -f "$PROJECT_ROOT/commons/mosquitto/out/bin/mosquitto_sub" "$rootfs_dst_dir/usr/bin/"
-cp -f "$PROJECT_ROOT/commons/mosquitto/out/lib/libmosquitto.so.1" "$rootfs_dst_dir/usr/lib/"
-cp -f "$PROJECT_ROOT/commons/mosquitto/mosquitto.conf" "$rootfs_dst_dir/etc/"
+cp -f "$PROJECT_ROOT/src/common/mosquitto/out/sbin/mosquitto" "$rootfs_dst_dir/usr/bin/"
+cp -f "$PROJECT_ROOT/src/common/mosquitto/out/bin/mosquitto_pub" "$rootfs_dst_dir/usr/bin/"
+cp -f "$PROJECT_ROOT/src/common/mosquitto/out/bin/mosquitto_sub" "$rootfs_dst_dir/usr/bin/"
+cp -f "$PROJECT_ROOT/src/common/mosquitto/out/lib/libmosquitto.so.1" "$rootfs_dst_dir/usr/lib/"
+cp -f "$PROJECT_ROOT/src/common/mosquitto/mosquitto.conf" "$rootfs_dst_dir/etc/"
 
 # --- Factory test binary ---
 cp -f "$SCRIPT_DIR/build/Falcon_Air_Factory" "$target_dir/bin/"
@@ -105,8 +105,10 @@ chmod 755 "$rootfs_dst_dir/etc/init.d/"*
 
 # --- xbotgo_rootfs overlay ---
 cp "$rootfs_src_target/etc/"* "$rootfs_dst_dir/etc/" -rf
+cp "$rootfs_src_target/etc/.usb_config" "$rootfs_dst_dir/etc/.usb_config"
 cp "$SCRIPT_DIR/usb_gadget/init_usb_gadget.sh" "$target_dir/scripts/init_usb_gadget.sh"
 cp "$SCRIPT_DIR/usb_gadget/usb_config.sh"      "$target_dir/scripts/usb_config.sh"
+cp "$rootfs_src_target/etc/.usb_config" "$rootfs_dst_dir/etc/.usb_config" 2>/dev/null || true
 cp -rf "$rootfs_src_target/usr/"* "$rootfs_dst_dir/usr/"
 cp "$rootfs_src_target/etc/profile" "$rootfs_dst_dir/etc/" -rf
 cp "$rootfs_src_target/etc/resolv.conf.tail" "$rootfs_dst_dir/etc/" -rf
@@ -114,6 +116,13 @@ cp "$rootfs_src_target/etc/resolv.conf.tail" "$rootfs_dst_dir/etc/" -rf
 # --- SDK: kernel + rkbin ---
 update_sdk_sub_dir rkbin rkbin
 update_sdk_sub_dir kernel kernel
+update_sdk_sub_dir buildroot buildroot
+
+# Apply Rockchip defconfig (RK_USB_RNDIS=y etc.)
+# Remove stale rv1126b dir left by old "update_sdk_sub_dir device device"
+rm -rf "$sdk_dir/device/rockchip/rv1126b"
+cp -f "$SCRIPT_DIR/sdk_patch/device/rockchip/rv1126b/rockchip_rv1126b_ipc_64_evb1_v10_defconfig" \
+      "$sdk_dir/device/rockchip/.chips/rv1126b/rockchip_rv1126b_ipc_64_evb1_v10_defconfig"
 
 
 # Force DWC3 to peripheral mode for factory firmware.

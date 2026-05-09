@@ -1,8 +1,10 @@
-// Standalone entry point for BLE factory test binary.
-// This is a separate process from Falcon_Air_Factory.
-#include "hal/BleAdvertiser.h"
+// Standalone entry point for BLE WiFi configuration binary.
+// Provides BLE advertisement + GATT service for phone app WiFi config,
+// plus factory test SN broadcasting.
+#include "ble/BleAdvertiser.h"
 
-int main() {
+int main()
+{
     ft::BleAdvertiser ble;
     return ble.run();
 }

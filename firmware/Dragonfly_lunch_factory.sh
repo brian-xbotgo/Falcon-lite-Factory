@@ -54,6 +54,16 @@ source $TARGET_DIR/usr/scripts/init_usb_gadget.sh
 # (mosquitto is already started by S51otaupdate via start_mqtt.sh)
 echo "[factory] Starting BLE advertisement + factory test..." > /dev/kmsg
 
+# Wait for BlueZ to be fully ready
+echo "[factory] Waiting for BlueZ to be ready..." > /dev/kmsg
+for i in $(seq 1 15); do
+    if busctl list 2>/dev/null | grep -q "org.bluez"; then
+        echo "[factory] BlueZ is ready" > /dev/kmsg
+        break
+    fi
+    sleep 1
+done
+
 # Create required directories
 mkdir -p /device_data
 mkdir -p /userdata/prod/pics/4663

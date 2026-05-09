@@ -27,3 +27,9 @@ bleConfigureWifi	ble_central
 目录	bleConfigureWifi/	ble_central/
 构建产物	ble_wifi_config	out/ble_central
 两者没有共享任何源码或头文件，各自独立编译，只是都使用了 commons/ 下的公共库（mosquitto、glib、cJSON 等）和 MQTT 进行系统通信。
+
+
+产测上位机
+
+在蓝牙测试中是扫描Xbt-F-前缀的SSID，然后再读每个蓝牙的广播数据，数据为SN码
+

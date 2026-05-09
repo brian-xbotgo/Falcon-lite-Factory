@@ -39,6 +39,9 @@ set(FACTORY_SOURCES
     src/hal/I2cController.cpp
     src/hal/MotorController.cpp
     src/hal/FactoryDisplay.cpp
+    src/hal/RecorderController.cpp
+    src/hal/NullRecorder.cpp
+    src/hal/MqttRecorder.cpp
 
     # HAL - C (motor + hall drivers)
     src/hal/MotorHal.c
