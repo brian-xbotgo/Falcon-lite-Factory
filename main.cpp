@@ -56,9 +56,15 @@ int main() {
     }
 
     // ---- LED GPIO init (for mic test buzzer) ----
-    ft::GpioController::exportGpio(93);
-    ft::GpioController::setDirection(93, "out");
-    ft::GpioController::write(93, 0);
+    // white
+    ft::GpioController::exportGpio(170);
+    ft::GpioController::setDirection(170, "out");
+    ft::GpioController::write(170, 1);
+
+    // red
+    ft::GpioController::exportGpio(169);
+    ft::GpioController::setDirection(169, "out");
+    ft::GpioController::write(169, 1);
 
     // ---- LVGL Factory display ----
     ft::FactoryDisplay::instance().init();
