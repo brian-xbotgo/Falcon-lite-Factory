@@ -140,6 +140,7 @@
 		regulator-min-microvolt = <12000000>;
 		regulator-max-microvolt = <12000000>;
 	};
+
 };
 
 &dsi {

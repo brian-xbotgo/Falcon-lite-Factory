@@ -47,8 +47,8 @@ source $TARGET_DIR/usr/scripts/dragonfly_bt_init.sh >> /dev/kmsg
 sleep 1
 
 # ---- Phase 4: Setup USB gadget (ADB + RNDIS) ----
-# See usb_gadget/init_usb_gadget.sh for the full implementation
-source $TARGET_DIR/usr/scripts/init_usb_gadget.sh
+# usb_gadget_health.sh handles initial setup + ongoing health monitoring
+source $TARGET_DIR/usr/scripts/usb_gadget_health.sh
 
 # ---- Phase 5: Start BLE + factory test app ----
 # (mosquitto is already started by S51otaupdate via start_mqtt.sh)

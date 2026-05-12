@@ -1,10 +1,8 @@
 #!/bin/bash
 
 check_bt_chip() {
-    if [ -e /sys/class/rfkill/rfkill0/type ]; then
-        if grep -qi bluetooth /sys/class/rfkill/rfkill0/type; then
-            return 0
-        fi
+    if grep -rqi bluetooth /sys/class/rfkill/rfkill*/type 2>/dev/null; then
+        return 0
     fi
 
     if [ -e /dev/ttyS2 ]; then
@@ -33,9 +31,10 @@ fi
 
 echo "Bluetooth chip detected, initializing..."
 
-if [ -w /sys/class/rfkill/rfkill0/state ]; then
-    echo 0 > /sys/class/rfkill/rfkill0/state
-    echo 1 > /sys/class/rfkill/rfkill0/state
+BT_RFKILL=$(grep -l "bluetooth" /sys/class/rfkill/rfkill*/type 2>/dev/null | head -1 | sed 's/\/type//')
+if [ -n "$BT_RFKILL" ] && [ -w "$BT_RFKILL/state" ]; then
+    echo 0 > "$BT_RFKILL/state"
+    echo 1 > "$BT_RFKILL/state"
 fi
 
 hciattach /dev/ttyS2 any 1500000 flow &> /dev/null &

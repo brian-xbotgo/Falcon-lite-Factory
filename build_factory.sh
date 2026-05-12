@@ -106,12 +106,20 @@ chmod 755 "$rootfs_dst_dir/etc/init.d/"*
 # --- xbotgo_rootfs overlay ---
 cp "$rootfs_src_target/etc/"* "$rootfs_dst_dir/etc/" -rf
 cp "$rootfs_src_target/etc/.usb_config" "$rootfs_dst_dir/etc/.usb_config"
-cp "$SCRIPT_DIR/usb_gadget/init_usb_gadget.sh" "$target_dir/scripts/init_usb_gadget.sh"
-cp "$SCRIPT_DIR/usb_gadget/usb_config.sh"      "$target_dir/scripts/usb_config.sh"
+cp "$SCRIPT_DIR/usb_gadget/usb_config.sh"        "$target_dir/scripts/usb_config.sh"
+cp "$SCRIPT_DIR/usb_gadget/usb_gadget_health.sh" "$target_dir/scripts/usb_gadget_health.sh"
 cp "$rootfs_src_target/etc/.usb_config" "$rootfs_dst_dir/etc/.usb_config" 2>/dev/null || true
 cp -rf "$rootfs_src_target/usr/"* "$rootfs_dst_dir/usr/"
 cp "$rootfs_src_target/etc/profile" "$rootfs_dst_dir/etc/" -rf
 cp "$rootfs_src_target/etc/resolv.conf.tail" "$rootfs_dst_dir/etc/" -rf
+
+# Clean up Windows Zone.Identifier files (causes script parse errors)
+find "$rootfs_dst_dir" "$target_dir" -name "*:Zone.Identifier" -delete 2>/dev/null || true
+
+# .skip_fsck moved to after ./build.sh — Buildroot wipes rootfs during build
+
+# Disable S36wifibt-init.sh (saves ~4s boot time, factory script loads WiFi module directly)
+rm -f "$rootfs_dst_dir/etc/init.d/S36wifibt-init.sh"
 
 # --- SDK: kernel + rkbin ---
 update_sdk_sub_dir rkbin rkbin
@@ -153,5 +161,9 @@ if [ -f "$KERNEL_CFG" ] && ! grep -q "CONFIG_USB_CONFIGFS_RNDIS=y" "$KERNEL_CFG"
 fi
 
 ./build.sh
+
+# Skip fsck on boot (saves ~1.5s every boot)
+# Must be run AFTER ./build.sh because Buildroot wipes rootfs during build
+touch "$rootfs_dst_dir/.skip_fsck"
 
 echo ">>> 产测固件打包完成 <<<"
