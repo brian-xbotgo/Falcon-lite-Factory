@@ -10,21 +10,21 @@ TARGET_DIR="${TARGET_DIR:-/oem}"
 echo "[factory] Waiting for USB gadget (ADB)..." > /dev/kmsg
 
 # ---- Wait for UDC ----
-for i in $(seq 1 15); do
+for i in $(seq 1 5); do
     udc_dev=$(ls /sys/class/udc/ 2>/dev/null | head -1)
     [ -n "$udc_dev" ] && break
     sleep 1
 done
 
 if [ -z "$udc_dev" ]; then
-    echo "[factory] No UDC after 15s, ADB unavailable" > /dev/kmsg
+    echo "[factory] No UDC after 5s, ADB unavailable" > /dev/kmsg
     exit 0
 fi
 
 echo "[factory] UDC $udc_dev present, waiting for usb-gadget service..." > /dev/kmsg
 
 # ---- Wait for adbd (started by S50usb-gadget) ----
-for i in $(seq 1 20); do
+for i in $(seq 1 10); do
     if pidof adbd > /dev/null 2>&1; then
         echo "[factory] adbd started by usb-gadget service" > /dev/kmsg
         break
@@ -65,12 +65,15 @@ fi
 GADGET=/sys/kernel/config/usb_gadget/rockchip
 FUNC=$GADGET/functions
 CFG=$GADGET/configs/b.1
-if [ -f /etc/.usb_config ]; then
-    echo "[factory] /etc/.usb_config present, usb-gadget handles RNDIS" > /dev/kmsg
-elif [ -d "$GADGET" ] && [ ! -e "$FUNC/rndis.gs0" ]; then
+# Check if RNDIS is already configured (by usb-gadget service or previous run)
+if [ -e "$FUNC/rndis.gs0" ]; then
+    echo "[factory] RNDIS already configured" > /dev/kmsg
+elif [ -d "$GADGET" ]; then
     mkdir -p $FUNC/rndis.gs0
     ln -s $FUNC/rndis.gs0 $CFG/f2 2>/dev/null
-    echo "[factory] RNDIS function added to gadget" > /dev/kmsg
+    # Update idProduct: 0x0006 (adb) -> 0x0013 (adb-rndis)
+    echo 0x0013 > $GADGET/idProduct
+    echo "[factory] RNDIS function added to gadget (PID=0x0013)" > /dev/kmsg
     if [ -n "$udc_dev" ]; then
         echo "" > $GADGET/UDC 2>/dev/null
         sleep 1
@@ -89,3 +92,11 @@ ifconfig usb0 172.16.110.6 2>/dev/null && \
     ifconfig usb0 up 2>/dev/null && \
     echo "[factory] usb0 configured: 172.16.110.6" > /dev/kmsg || \
     echo "[factory] usb0 configuration failed" > /dev/kmsg
+
+# ---- Start USB reconnect monitor ----
+# Fixes "device not recognized" after USB cable unplug/replug
+RECONNECT_SCRIPT="$TARGET_DIR/usr/scripts/usb_reconnect.sh"
+if [ -x "$RECONNECT_SCRIPT" ]; then
+    $RECONNECT_SCRIPT &
+    echo "[factory] USB reconnect monitor started" > /dev/kmsg
+fi
