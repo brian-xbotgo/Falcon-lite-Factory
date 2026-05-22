@@ -90,13 +90,13 @@ elif [ "$1" == "start" ]; then
             echo "/tmp/wps_hostapd.conf missing, use original one"
         fi
         echo "Waiting for AP to be ENABLED..."
-        for i in {1..10}; do
+        for i in $(seq 1 20); do
             state=$(hostapd_cli -i wlan1 status | grep state=)
             if echo "$state" | grep -q "ENABLED"; then
                 echo "AP ready!"
                 break
             fi
-            sleep 1
+            sleep 0.5
         done
         echo "start ap service done"
     else

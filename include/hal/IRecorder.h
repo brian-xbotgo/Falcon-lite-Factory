@@ -1,5 +1,7 @@
 #pragma once
 #include <cstdint>
+#include <string>
+#include <vector>
 
 // Recording abstraction — 4-byte command protocol (compatible with multi_media ALR)
 //   byte0: cmd      (0=start, 1=pause, 2=recover, 3=stop)
@@ -9,6 +11,25 @@
 
 namespace ft {
 
+// ─── V4L2 camera configuration ──────────────────────────────────────────────
+
+struct CameraConfig {
+    std::string device;       // e.g. /dev/video0
+    unsigned int width  = 1280;
+    unsigned int height = 720;
+    std::string format = "MJPG";  // FOURCC string: "MJPG", "YUYV", "H264"
+    unsigned int fps    = 30;
+    std::string output;       // output file path, e.g. /tmp/cam0.avi
+    int buffer_count    = 4;  // V4L2 buffer count for mmap streaming
+};
+
+struct RecorderConfig {
+    std::vector<CameraConfig> cameras;
+    unsigned int max_duration_sec = 0;   // 0 = unlimited, record until stop()
+    std::string config_source;          // path to JSON config (for reference)
+
+    bool valid() const { return !cameras.empty(); }
+};
 struct RecorderCmd {
     uint8_t cmd          = 0;
     uint8_t cmd_origin   = 0;

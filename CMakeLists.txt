@@ -41,7 +41,8 @@ set(FACTORY_SOURCES
     src/hal/FactoryDisplay.cpp
     src/hal/RecorderController.cpp
     src/hal/NullRecorder.cpp
-    src/hal/MqttRecorder.cpp
+    src/hal/V4l2Recorder.cpp
+    src/hal/MppEncoder.cpp
 
     # HAL - C (motor + hall drivers)
     src/hal/MotorHal.c
@@ -83,7 +84,7 @@ target_link_directories(Falcon_Air_Factory PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party/mosquitto/out/lib
 )
 
-target_link_libraries(Falcon_Air_Factory lvgl mosquitto)
+target_link_libraries(Falcon_Air_Factory lvgl mosquitto rockchip_mpp)
 
 # =================================================================
 # 2. soc_test - Standalone SoC test client

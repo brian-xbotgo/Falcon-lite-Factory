@@ -1,0 +1,28 @@
+{
+    "version": 1,
+    "description": "Factory recorder configuration - V4L2-based, platform-independent",
+    "cameras": [
+        {
+            "device": "/dev/video23",
+            "comment": "cam0: GC4663 on I2C3/0x29 -> rkisp-vir0 mainpath (ISP NV12)",
+            "width": 1280,
+            "height": 720,
+            "format": "NV12",
+            "fps": 30,
+            "output": "/userdata/cam0_output.h264",
+            "buffer_count": 4
+        },
+        {
+            "device": "/dev/video31",
+            "comment": "cam1: GC4663 on I2C4/0x29 -> rkisp-vir1 mainpath (ISP NV12)",
+            "width": 1280,
+            "height": 720,
+            "format": "NV12",
+            "fps": 30,
+            "output": "/userdata/cam1_output.h264",
+            "buffer_count": 4
+        }
+    ],
+    "max_duration_sec": 0,
+    "comment_max_duration": "0 = unlimited, record until stop() is called"
+}

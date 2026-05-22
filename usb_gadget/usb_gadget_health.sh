@@ -100,9 +100,11 @@ if [ ! -e "$FUNC/rndis.gs0" ] && [ -d "$GADGET" ]; then
 fi
 
 # ---- Phase 5: Ensure usb0 IP ----
-sleep 2
-ifconfig usb0 172.16.110.6 2>/dev/null && \
-    ifconfig usb0 up 2>/dev/null && \
+for i in $(seq 1 10); do
+    ifconfig usb0 172.16.110.6 2>/dev/null && break
+    sleep 0.3
+done
+ifconfig usb0 up 2>/dev/null && \
     log "usb0 configured: 172.16.110.6" || \
     log "usb0 configuration failed"
 

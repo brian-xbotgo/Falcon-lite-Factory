@@ -8,6 +8,8 @@
 #include "hal/HallSwitch.h"
 #include "hal/GpioController.h"
 #include "hal/FactoryDisplay.h"
+#include "hal/RecorderController.h"
+#include "hal/RecorderImpl.h"
 
 #include "tests/BatteryTest.h"
 #include "tests/CameraTest.h"
@@ -27,6 +29,8 @@
 #include <csignal>
 #include <thread>
 #include <chrono>
+#include <nlohmann/json.hpp>
+#include <fstream>
 
 static void on_signal(int) { ft::globals().running = false; }
 
@@ -52,7 +56,6 @@ int main() {
     ft::MotorController::instance().init();
     if (hall_switch_init() != 0) {
         std::fprintf(stderr, "[main] hall_switch_init failed, hall test will not work\n");
-        return -1;
     }
 
     // ---- LED GPIO init (for mic test buzzer) ----
@@ -78,6 +81,46 @@ int main() {
                 int cap = std::atoi(uevent.c_str() + p + 23);
                 ft::FactoryDisplay::instance().setBatteryPercent(cap);
             }
+        }
+    }
+
+    // ---- V4L2 Recorder init ----
+    {
+        std::ifstream cfg_file("/oem/usr/conf/recorder.json");
+        if (cfg_file.is_open()) {
+            try {
+                nlohmann::json j;
+                cfg_file >> j;
+                ft::RecorderConfig rcfg;
+                rcfg.config_source = "/oem/usr/conf/recorder.json";
+                if (j.contains("max_duration_sec"))
+                    rcfg.max_duration_sec = j["max_duration_sec"];
+                if (j.contains("cameras") && j["cameras"].is_array()) {
+                    for (auto& c : j["cameras"]) {
+                        ft::CameraConfig cc;
+                        if (c.contains("device")) cc.device = c["device"];
+                        if (c.contains("width"))  cc.width  = c["width"];
+                        if (c.contains("height")) cc.height = c["height"];
+                        if (c.contains("format")) cc.format = c["format"];
+                        if (c.contains("fps"))    cc.fps    = c["fps"];
+                        if (c.contains("output")) cc.output = c["output"];
+                        if (c.contains("buffer_count")) cc.buffer_count = c["buffer_count"];
+                        rcfg.cameras.push_back(cc);
+                    }
+                }
+                if (rcfg.valid()) {
+                    ft::RecorderController::instance().setRecorder(
+                        ft::createV4l2Recorder(rcfg));
+                    std::fprintf(stderr, "[main] V4L2 recorder configured: %zu camera(s)\n",
+                                 rcfg.cameras.size());
+                } else {
+                    std::fprintf(stderr, "[main] recorder config has no cameras, using null\n");
+                }
+            } catch (const std::exception& e) {
+                std::fprintf(stderr, "[main] recorder config parse error: %s, using null\n", e.what());
+            }
+        } else {
+            std::fprintf(stderr, "[main] no recorder config found, using null (set /oem/usr/conf/recorder.json to enable)\n");
         }
     }
 

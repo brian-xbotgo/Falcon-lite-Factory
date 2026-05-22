@@ -96,6 +96,10 @@ cp -f "$SCRIPT_DIR/firmware/Dragonfly_lunch_factory.sh" "$target_dir/scripts/Dra
 cp -f "$SCRIPT_DIR/configs/hall_threshold.ini" "$userdata_dir/"
 echo ">>> Copied hall_threshold.ini to $userdata_dir"
 
+# --- V4L2 recorder config ---
+cp -f "$SCRIPT_DIR/configs/recorder.json" "$target_dir/conf/"
+echo ">>> Copied recorder.json to $target_dir/conf"
+
 # --- Factory mode flag ---
 echo "" > "$userdata_dir/factory_mode"
 echo "" > "$userdata_dir/aging_time.conf"
@@ -165,5 +169,9 @@ fi
 # Skip fsck on boot (saves ~1.5s every boot)
 # Must be run AFTER ./build.sh because Buildroot wipes rootfs during build
 touch "$rootfs_dst_dir/.skip_fsck"
+
+# Remove rkipc — conflicts with standalone rkaiq_3A_server (abstract socket collision)
+rm -f "$rootfs_dst_dir/usr/bin/rkipc"
+echo ">>> rkipc removed from firmware"
 
 echo ">>> 产测固件打包完成 <<<"
