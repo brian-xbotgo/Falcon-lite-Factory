@@ -1,9 +1,14 @@
 // V4l2Recorder — platform-independent V4L2 video capture.
 // Uses standard Linux V4L2 API (videodev2.h).  No Rockchip or
 // multi_media dependency.  Supports multiple cameras concurrently.
+// Audio: captures from ALSA via arecord pipe, encodes to G.711A,
+// and muxes with H.264 into an MP4 container.
 
 #include "hal/V4l2Recorder.h"
 #include "hal/IRecorder.h"
+#include "hal/Mp4Muxer.h"
+#include "hal/AudioCapture.h"
+#include "hal/G711Encoder.h"
 
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -16,6 +21,9 @@
 #include <cstdlib>
 #include <cstdio>
 #include <linux/videodev2.h>
+
+#include <string>
+#include <vector>
 
 namespace ft {
 
@@ -258,13 +266,14 @@ bool V4l2Recorder::start(const RecorderCmd& /*cmd*/) {
     std::fprintf(stderr, "[v4l2] starting %zu camera(s)\n", m_workers.size());
 
     // Open all cameras first
-    for (auto& wp : m_workers) {
-        if (!startCamera(*wp)) {
+    for (size_t i = 0; i < m_workers.size(); ++i) {
+        bool isFirst = (i == 0);
+        if (!startCamera(*m_workers[i], isFirst)) {
             std::fprintf(stderr, "[v4l2] failed to start camera %s, aborting\n",
-                         wp->cfg.device.c_str());
+                         m_workers[i]->cfg.device.c_str());
             // Stop any already-started cameras
-            for (auto& wp2 : m_workers) {
-                if (wp2->running) stopCamera(*wp2);
+            for (size_t j = 0; j < m_workers.size(); ++j) {
+                if (m_workers[j]->running) stopCamera(*m_workers[j], j == 0);
             }
             return false;
         }
@@ -285,8 +294,8 @@ bool V4l2Recorder::stop() {
     }
 
     // Join all threads
-    for (auto& wp : m_workers) {
-        stopCamera(*wp);
+    for (size_t i = 0; i < m_workers.size(); ++i) {
+        stopCamera(*m_workers[i], i == 0);
     }
 
     m_active = false;
@@ -302,22 +311,57 @@ bool V4l2Recorder::isRecording() const {
 // Per-camera control
 // ──────────────────────────────────────────────────────────────────────────────
 
-bool V4l2Recorder::startCamera(CameraWorker& w) {
-    const auto& d = w.cfg.device;
-    std::fprintf(stderr, "[v4l2] starting camera %s (%ux%u %s)\n",
-                 d.c_str(), w.cfg.width, w.cfg.height, w.cfg.format.c_str());
+// Generate a unique output path under /userdata/record/ with auto-increment counter.
+// Format: /userdata/record/cam{N}_{timestamp}_{count}.mp4
+static std::string generateOutputPath(const std::string& base_name) {
+    static int session_counter = 0;
+    const std::string record_dir = "/userdata/record";
 
-    // Open output file
-    if (!w.cfg.output.empty()) {
-        w.outfile = std::fopen(w.cfg.output.c_str(), "wb");
-        if (!w.outfile) {
-            std::fprintf(stderr, "[v4l2] cannot create output file %s: %s\n",
-                         w.cfg.output.c_str(), strerror(errno));
+    // Create directory if not exists (best effort)
+    struct stat st;
+    if (::stat(record_dir.c_str(), &st) != 0) {
+        if (::mkdir(record_dir.c_str(), 0755) != 0 && errno != EEXIST) {
+            std::fprintf(stderr, "[v4l2] mkdir %s failed: %s\n", record_dir.c_str(), strerror(errno));
+        }
+    }
+
+    // Extract camera identifier from base path (e.g. "cam0" from "/userdata/cam0_output.mp4")
+    std::string cam_id = "cam";
+    size_t slash = base_name.find_last_of('/');
+    size_t start = (slash == std::string::npos) ? 0 : slash + 1;
+    size_t under = base_name.find('_', start);
+    if (under != std::string::npos && under > start) {
+        cam_id = base_name.substr(start, under - start);
+    }
+
+    // Build path: /userdata/record/cam0_001.mp4
+    char path[256];
+    std::snprintf(path, sizeof(path), "%s/%s_%03d.mp4",
+                  record_dir.c_str(), cam_id.c_str(), ++session_counter);
+    return std::string(path);
+}
+
+bool V4l2Recorder::startCamera(CameraWorker& w, bool isFirst) {
+    const auto& d = w.cfg.device;
+
+    // Generate unique output path for this recording session
+    std::string output_path = generateOutputPath(w.cfg.output);
+    std::fprintf(stderr, "[v4l2] starting camera %s (%ux%u %s)%s -> %s\n",
+                 d.c_str(), w.cfg.width, w.cfg.height, w.cfg.format.c_str(),
+                 isFirst ? " [audio]" : "", output_path.c_str());
+
+    // Open MP4 muxer (replaces raw fwrite)
+    if (!output_path.empty()) {
+        if (!w.muxer.open(output_path)) {
+            std::fprintf(stderr, "[v4l2] cannot create output file %s\n", output_path.c_str());
             return false;
         }
     } else {
-        w.outfile = nullptr;
+        std::fprintf(stderr, "[v4l2] no output path configured for %s\n", d.c_str());
+        return false;
     }
+
+    w.hasAudio = isFirst && m_cfg.audio.enabled;
 
     // Init MPP H.264 encoder
     {
@@ -329,18 +373,18 @@ bool V4l2Recorder::startCamera(CameraWorker& w) {
         enc_cfg.gop    = 60;
         if (!w.encoder.init(enc_cfg)) {
             std::fprintf(stderr, "[v4l2] failed to init MPP encoder for %s\n", d.c_str());
-            stopCamera(w);
+            stopCamera(w, isFirst);
             return false;
         }
     }
 
     // Open V4L2 device and set up streaming
-    if (!v4l2Open(d, w))   { stopCamera(w); return false; }
-    if (!v4l2SetFormat(w)) { stopCamera(w); return false; }
+    if (!v4l2Open(d, w))   { stopCamera(w, isFirst); return false; }
+    if (!v4l2SetFormat(w)) { stopCamera(w, isFirst); return false; }
     v4l2SetFps(w.fd, w.cfg.fps);      // best-effort, ignore failure
     unsigned int type = bufType(w);
     if (!v4l2ReqBufs(w.fd, w.cfg.buffer_count, type))
-                            { stopCamera(w); return false; }
+                            { stopCamera(w, isFirst); return false; }
     // STREAMON deferred to cameraLoop() — V4L2 spec requires QBUF before STREAMON
 
     // Start capture thread
@@ -350,11 +394,21 @@ bool V4l2Recorder::startCamera(CameraWorker& w) {
     return true;
 }
 
-void V4l2Recorder::stopCamera(CameraWorker& w) {
+void V4l2Recorder::stopCamera(CameraWorker& w, bool isFirst) {
     w.running = false;
 
     if (w.thread.joinable()) {
         w.thread.join();
+    }
+
+    // Stop audio first (before closing muxer)
+    // Audio thread writes to worker[0]->muxer, so it MUST be fully stopped
+    // before finalizing the muxer, otherwise the MP4 file will be corrupted.
+    if (isFirst && m_audioRunning.exchange(false)) {
+        if (m_audioThread.joinable()) {
+            m_audioThread.join();
+        }
+        m_audioCapture.close();
     }
 
     if (w.fd >= 0) {
@@ -363,13 +417,17 @@ void V4l2Recorder::stopCamera(CameraWorker& w) {
         w.fd = -1;
     }
 
-    if (w.outfile) {
-        std::fclose(w.outfile);
-        w.outfile = nullptr;
-    }
-
     if (w.encoder.isInitialized()) {
         w.encoder.deinit();
+    }
+
+    // Finalize MP4 muxer (writes moov box, closes file)
+    // At this point audio thread is guaranteed to have exited, so no
+    // concurrent writes to the file handle remain.
+    if (w.muxer.isOpen()) {
+        if (!w.muxer.finalize()) {
+            std::fprintf(stderr, "[v4l2] muxer finalize failed for %s\n", w.cfg.device.c_str());
+        }
     }
 }
 
@@ -465,14 +523,51 @@ void V4l2Recorder::cameraLoop(CameraWorker& w) {
             break;
         }
 
-        // Encode NV12 → H.264 and write to file
+        // Encode NV12 → H.264 and feed to MP4 muxer
         size_t bytes_used = mplane ? planes[0].bytesused : buf.bytesused;
-        if (bytes_used > 0 && w.outfile) {
+        if (bytes_used > 0 && w.muxer.isOpen()) {
             const uint8_t* enc_data = nullptr;
             size_t enc_size = 0;
             if (w.encoder.encode(static_cast<const uint8_t*>(bufs[buf.index].start),
                                  bytes_used, &enc_data, &enc_size)) {
-                writeH264(w, enc_data, enc_size);
+                // Detect keyframe by checking NAL type 5 (IDR)
+                bool is_key = false;
+                if (enc_size >= 5) {
+                    // Scan for start code + NAL header
+                    for (size_t k = 0; k + 4 < enc_size; ++k) {
+                        if (enc_data[k] == 0x00 && enc_data[k+1] == 0x00) {
+                            uint8_t nal_type = 0;
+                            if (enc_data[k+2] == 0x01) {
+                                nal_type = enc_data[k+3] & 0x1F;
+                            } else if (enc_data[k+2] == 0x00 && enc_data[k+3] == 0x01) {
+                                if (k + 4 < enc_size) nal_type = enc_data[k+4] & 0x1F;
+                            }
+                            if (nal_type == 5) { is_key = true; break; }
+                        }
+                    }
+                }
+
+                // Start audio capture after first video frame is encoded
+                // This ensures video data precedes audio data in the mdat box
+                if (captured == 0 && w.hasAudio && !m_audioRunning.load()) {
+                    if (m_audioCapture.open(m_cfg.audio.device,
+                                            m_cfg.audio.sample_rate,
+                                            m_cfg.audio.channels,
+                                            m_cfg.audio.gain_db)) {
+                        m_audioRunning = true;
+                        m_audioThread = std::thread(&V4l2Recorder::audioLoop, this);
+                        std::fprintf(stderr, "[v4l2] audio capture started after first video frame\n");
+                    } else {
+                        std::fprintf(stderr, "[v4l2] failed to start audio capture, continuing video-only\n");
+                        w.hasAudio = false;
+                    }
+                }
+
+                // PTS in 90kHz timescale from frame counter
+                uint64_t video_pts = static_cast<uint64_t>(captured) * Mp4Muxer::VIDEO_TIMESCALE / w.cfg.fps;
+                if (!w.muxer.addVideoFrame(enc_data, enc_size, video_pts, is_key)) {
+                    std::fprintf(stderr, "[v4l2] muxer addVideoFrame failed on %s\n", device.c_str());
+                }
             } else {
                 std::fprintf(stderr, "[v4l2] encode failed on %s, frame dropped\n",
                              device.c_str());
@@ -496,16 +591,49 @@ void V4l2Recorder::cameraLoop(CameraWorker& w) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Output helpers
+// Audio capture loop (runs in dedicated thread when audio is enabled)
 // ──────────────────────────────────────────────────────────────────────────────
 
-void V4l2Recorder::writeH264(CameraWorker& w, const uint8_t* data, size_t len) {
-    if (!w.outfile || !data || len == 0) return;
+void V4l2Recorder::audioLoop() {
+    std::fprintf(stderr, "[audio] capture loop started\n");
 
-    if (std::fwrite(data, 1, len, w.outfile) != len) {
-        std::fprintf(stderr, "[v4l2] write H.264 failed for %s\n", w.cfg.device.c_str());
-        w.running = false;
+    // PCM buffer: 20ms frame @ 16kHz mono = 320 samples
+    int16_t pcm_buf[G711Encoder::FRAME_SAMPLES];
+    uint8_t alaw_buf[G711Encoder::FRAME_BYTES];
+    uint64_t audio_pts = 0;
+
+    while (m_audioRunning) {
+        int n = m_audioCapture.readFrame(pcm_buf, G711Encoder::FRAME_SAMPLES);
+        if (n <= 0) {
+            if (m_audioRunning) {
+                std::fprintf(stderr, "[audio] read error, stopping\n");
+                m_audioRunning = false;
+            }
+            break;
+        }
+
+        static FILE* dbg_pcm = std::fopen("/userdata/prod/debug_postfilter.pcm", "wb");
+        if (dbg_pcm) {
+            std::fwrite(pcm_buf, sizeof(int16_t),
+                        G711Encoder::FRAME_SAMPLES, dbg_pcm);
+            std::fflush(dbg_pcm);
+        }
+        // Encode PCM → G.711 A-law
+        G711Encoder::encode(pcm_buf, alaw_buf, static_cast<size_t>(n));
+
+
+
+        // Feed to the first camera's muxer (worker[0])
+        if (!m_workers.empty() && m_workers[0]->muxer.isOpen()) {
+            uint64_t pts = audio_pts;
+            audio_pts += G711Encoder::FRAME_SAMPLES;  // 320 ticks per frame @ 16kHz
+            if (!m_workers[0]->muxer.addAudioFrame(alaw_buf, G711Encoder::FRAME_BYTES, pts)) {
+                std::fprintf(stderr, "[audio] muxer addAudioFrame failed\n");
+            }
+        }
     }
+
+    std::fprintf(stderr, "[audio] capture loop ended\n");
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

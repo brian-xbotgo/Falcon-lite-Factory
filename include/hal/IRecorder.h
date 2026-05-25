@@ -19,12 +19,21 @@ struct CameraConfig {
     unsigned int height = 720;
     std::string format = "MJPG";  // FOURCC string: "MJPG", "YUYV", "H264"
     unsigned int fps    = 30;
-    std::string output;       // output file path, e.g. /tmp/cam0.avi
+    std::string output;       // output file path, e.g. /tmp/cam0.mp4
     int buffer_count    = 4;  // V4L2 buffer count for mmap streaming
+};
+
+struct AudioConfig {
+    bool         enabled     = true;
+    std::string  device      = "hw:1,0";   // ALSA device, e.g. PDM mic array
+    unsigned int sample_rate = 16000;
+    unsigned int channels    = 1;
+    int          gain_db     = 100;         // microphone gain in dB (0 = no change)
 };
 
 struct RecorderConfig {
     std::vector<CameraConfig> cameras;
+    AudioConfig  audio;
     unsigned int max_duration_sec = 0;   // 0 = unlimited, record until stop()
     std::string config_source;          // path to JSON config (for reference)
 

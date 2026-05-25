@@ -43,6 +43,9 @@ set(FACTORY_SOURCES
     src/hal/NullRecorder.cpp
     src/hal/V4l2Recorder.cpp
     src/hal/MppEncoder.cpp
+    src/hal/Mp4Muxer.cpp
+    src/hal/AudioCapture.cpp
+    src/hal/G711Encoder.cpp
 
     # HAL - C (motor + hall drivers)
     src/hal/MotorHal.c

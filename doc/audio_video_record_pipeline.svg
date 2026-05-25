@@ -1,0 +1,197 @@
+<svg width="100%" viewBox="0 0 720 880" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>工厂录像模块音视频录制流水线</title>
+<desc>从音频采集到MP4封装的完整流程</desc>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs>
+
+<text x="360" y="28" text-anchor="middle" style="fill:rgb(20,20,19);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:15px;font-weight:600;">工厂录像模块 — 音视频录制流水线</text>
+
+<!-- ========== 顶层流水线 ========== -->
+
+<!-- ① PDM 麦克风 -->
+<g>
+  <rect x="30" y="50" width="120" height="44" rx="8" stroke-width="0.5" style="fill:rgb(241,239,232);stroke:rgb(95,94,90);"/>
+  <text x="90" y="65" text-anchor="middle" dominant-baseline="central" style="fill:rgb(68,68,65);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:13px;font-weight:500;">① PDM 麦克风</text>
+  <text x="90" y="82" text-anchor="middle" dominant-baseline="central" style="fill:rgb(95,94,90);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">S32_LE / 48kHz / 2ch</text>
+</g>
+<line x1="150" y1="72" x2="180" y2="72" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.5;"/>
+
+<!-- ② ALSA arecord -->
+<g>
+  <rect x="180" y="50" width="130" height="44" rx="8" stroke-width="0.5" style="fill:rgb(238,237,254);stroke:rgb(83,74,183);"/>
+  <text x="245" y="65" text-anchor="middle" dominant-baseline="central" style="fill:rgb(60,52,137);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:13px;font-weight:500;">② ALSA arecord</text>
+  <text x="245" y="82" text-anchor="middle" dominant-baseline="central" style="fill:rgb(83,74,183);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">管道读取原始 PCM</text>
+</g>
+<line x1="310" y1="72" x2="340" y2="72" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.5;"/>
+
+<!-- ③ AudioCapture -->
+<g>
+  <rect x="340" y="50" width="140" height="44" rx="8" stroke-width="0.5" style="fill:rgb(230,241,251);stroke:rgb(24,95,165);"/>
+  <text x="410" y="65" text-anchor="middle" dominant-baseline="central" style="fill:rgb(12,68,124);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:13px;font-weight:500;">③ AudioCapture</text>
+  <text x="410" y="82" text-anchor="middle" dominant-baseline="central" style="fill:rgb(24,95,165);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">重采样 + LPF + DC 消除</text>
+</g>
+<line x1="480" y1="72" x2="510" y2="72" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.5;"/>
+
+<!-- ④ G.711A 编码 -->
+<g>
+  <rect x="510" y="50" width="130" height="44" rx="8" stroke-width="0.5" style="fill:rgb(225,245,238);stroke:rgb(15,110,86);"/>
+  <text x="575" y="65" text-anchor="middle" dominant-baseline="central" style="fill:rgb(8,80,65);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:13px;font-weight:500;">④ G.711A 编码</text>
+  <text x="575" y="82" text-anchor="middle" dominant-baseline="central" style="fill:rgb(15,110,86);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">S16_LE → A-law 320 bytes</text>
+</g>
+<line x1="640" y1="72" x2="670" y2="72" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.5;"/>
+
+<!-- ⑤ MP4 Muxer (音频入口) -->
+<g>
+  <rect x="670" y="50" width="30" height="44" rx="6" stroke-width="0.5" style="fill:rgb(250,236,231);stroke:rgb(153,60,29);"/>
+  <text x="685" y="72" text-anchor="middle" dominant-baseline="central" style="fill:rgb(113,43,19);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:12px;font-weight:500;">⬇</text>
+</g>
+
+<!-- Divider -->
+<line x1="30" y1="115" x2="690" y2="115" stroke="rgba(31,30,29,0.3)" stroke-width="0.5" stroke-dasharray="4 3"/>
+
+<!-- ========== 视频流水线 ========== -->
+
+<!-- ① GC4663 传感器 -->
+<g>
+  <rect x="30" y="135" width="120" height="44" rx="8" stroke-width="0.5" style="fill:rgb(241,239,232);stroke:rgb(95,94,90);"/>
+  <text x="90" y="150" text-anchor="middle" dominant-baseline="central" style="fill:rgb(68,68,65);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:13px;font-weight:500;">① GC4663 传感器</text>
+  <text x="90" y="167" text-anchor="middle" dominant-baseline="central" style="fill:rgb(95,94,90);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">CSI-2 → ISP (rkisp)</text>
+</g>
+<line x1="150" y1="157" x2="180" y2="157" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.5;"/>
+
+<!-- ② V4L2 抓流 -->
+<g>
+  <rect x="180" y="135" width="120" height="44" rx="8" stroke-width="0.5" style="fill:rgb(238,237,254);stroke:rgb(83,74,183);"/>
+  <text x="240" y="150" text-anchor="middle" dominant-baseline="central" style="fill:rgb(60,52,137);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:13px;font-weight:500;">② V4L2 抓流</text>
+  <text x="240" y="167" text-anchor="middle" dominant-baseline="central" style="fill:rgb(83,74,183);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">mmap DQBUF / NV12</text>
+</g>
+<line x1="300" y1="157" x2="330" y2="157" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.5;"/>
+
+<!-- ③ MPP H.264 编码 -->
+<g>
+  <rect x="330" y="135" width="140" height="44" rx="8" stroke-width="0.5" style="fill:rgb(230,241,251);stroke:rgb(24,95,165);"/>
+  <text x="400" y="150" text-anchor="middle" dominant-baseline="central" style="fill:rgb(12,68,124);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:13px;font-weight:500;">③ MPP H.264 编码</text>
+  <text x="400" y="167" text-anchor="middle" dominant-baseline="central" style="fill:rgb(24,95,165);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">RK VENC 硬编码 CBR 2Mbps</text>
+</g>
+<line x1="470" y1="157" x2="500" y2="157" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.5;"/>
+
+<!-- ④ NAL 检测关键帧 -->
+<g>
+  <rect x="500" y="135" width="130" height="44" rx="8" stroke-width="0.5" style="fill:rgb(225,245,238);stroke:rgb(15,110,86);"/>
+  <text x="565" y="150" text-anchor="middle" dominant-baseline="central" style="fill:rgb(8,80,65);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:13px;font-weight:500;">④ NAL 关键帧检测</text>
+  <text x="565" y="167" text-anchor="middle" dominant-baseline="central" style="fill:rgb(15,110,86);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">start code → NAL type 5</text>
+</g>
+<line x1="630" y1="157" x2="660" y2="157" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.5;"/>
+
+<!-- ⑤ MP4 Muxer (视频入口) -->
+<g>
+  <rect x="660" y="135" width="40" height="44" rx="6" stroke-width="0.5" style="fill:rgb(250,236,231);stroke:rgb(153,60,29);"/>
+  <text x="680" y="157" text-anchor="middle" dominant-baseline="central" style="fill:rgb(113,43,19);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:12px;font-weight:500;">⬇</text>
+</g>
+
+<!-- ========== 下方详解：音频处理链路 ========== -->
+<line x1="30" y1="205" x2="690" y2="205" stroke="rgba(31,30,29,0.3)" stroke-width="0.5" stroke-dasharray="4 3"/>
+<text x="360" y="228" text-anchor="middle" style="fill:rgb(20,20,19);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:14px;font-weight:500;">音频处理链路详解</text>
+
+<g>
+  <rect x="40" y="250" width="640" height="140" rx="10" stroke-width="0.5" style="fill:rgb(250,248,240);stroke:rgb(153,140,100);"/>
+  <text x="360" y="272" text-anchor="middle" style="fill:rgb(113,100,60);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:13px;font-weight:500;">AudioCapture::readFrame() — 48kHz → 16kHz 降采样与滤波</text>
+
+  <!-- Step boxes inside audio detail -->
+  <rect x="60" y="290" width="100" height="36" rx="6" stroke-width="0.5" style="fill:rgb(241,239,232);stroke:rgb(95,94,90);"/>
+  <text x="110" y="312" text-anchor="middle" dominant-baseline="central" style="fill:rgb(68,68,65);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:500;">读取 S32_LE</text>
+  <line x1="160" y1="308" x2="185" y2="308" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.2;"/>
+
+  <rect x="185" y="290" width="110" height="36" rx="6" stroke-width="0.5" style="fill:rgb(238,237,254);stroke:rgb(83,74,183);"/>
+  <text x="240" y="312" text-anchor="middle" dominant-baseline="central" style="fill:rgb(60,52,137);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:500;">L+R 平均混音</text>
+  <line x1="295" y1="308" x2="320" y2="308" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.2;"/>
+
+  <rect x="320" y="290" width="120" height="36" rx="6" stroke-width="0.5" style="fill:rgb(230,241,251);stroke:rgb(24,95,165);"/>
+  <text x="380" y="312" text-anchor="middle" dominant-baseline="central" style="fill:rgb(12,68,124);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:500;">4阶 Butterworth LPF</text>
+  <line x1="440" y1="308" x2="465" y2="308" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.2;"/>
+
+  <rect x="465" y="290" width="100" height="36" rx="6" stroke-width="0.5" style="fill:rgb(225,245,238);stroke:rgb(15,110,86);"/>
+  <text x="515" y="312" text-anchor="middle" dominant-baseline="central" style="fill:rgb(8,80,65);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:500;">3:1 Decimation</text>
+  <line x1="565" y1="308" x2="590" y2="308" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.2;"/>
+
+  <rect x="590" y="290" width="70" height="36" rx="6" stroke-width="0.5" style="fill:rgb(250,236,231);stroke:rgb(153,60,29);"/>
+  <text x="625" y="312" text-anchor="middle" dominant-baseline="central" style="fill:rgb(113,43,19);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:500;">DC 消除</text>
+
+  <!-- Second row -->
+  <rect x="185" y="340" width="130" height="36" rx="6" stroke-width="0.5" style="fill:rgb(241,239,232);stroke:rgb(95,94,90);"/>
+  <text x="250" y="362" text-anchor="middle" dominant-baseline="central" style="fill:rgb(68,68,65);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:500;">24-bit → 16-bit 饱和</text>
+  <line x1="315" y1="358" x2="340" y2="358" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.2;"/>
+
+  <rect x="340" y="340" width="130" height="36" rx="6" stroke-width="0.5" style="fill:rgb(238,237,254);stroke:rgb(83,74,183);"/>
+  <text x="405" y="362" text-anchor="middle" dominant-baseline="central" style="fill:rgb(60,52,137);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:500;">输出 S16_LE 16kHz mono</text>
+  <line x1="470" y1="358" x2="495" y2="358" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.2;"/>
+
+  <rect x="495" y="340" width="130" height="36" rx="6" stroke-width="0.5" style="fill:rgb(230,241,251);stroke:rgb(24,95,165);"/>
+  <text x="560" y="362" text-anchor="middle" dominant-baseline="central" style="fill:rgb(12,68,124);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:500;">G711Encoder::encode()</text>
+</g>
+
+<!-- ========== 下方详解：MP4 封装结构 ========== -->
+<line x1="30" y1="410" x2="690" y2="410" stroke="rgba(31,30,29,0.3)" stroke-width="0.5" stroke-dasharray="4 3"/>
+<text x="360" y="433" text-anchor="middle" style="fill:rgb(20,20,19);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:14px;font-weight:500;">MP4 封装与线程模型</text>
+
+<g>
+  <rect x="40" y="455" width="640" height="200" rx="10" stroke-width="0.5" style="fill:rgb(245,245,250);stroke:rgb(100,100,130);"/>
+  <text x="360" y="477" text-anchor="middle" style="fill:rgb(60,60,80);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:13px;font-weight:500;">Mp4Muxer — moov-at-end 布局，H.264 + G.711A 双轨</text>
+
+  <!-- Video track box -->
+  <rect x="60" y="495" width="270" height="70" rx="8" stroke-width="0.5" style="fill:rgb(230,241,251);stroke:rgb(24,95,165);"/>
+  <text x="195" y="512" text-anchor="middle" style="fill:rgb(12,68,124);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:12px;font-weight:500;">视频轨 (trak #1)</text>
+  <text x="195" y="530" text-anchor="middle" style="fill:rgb(24,95,165);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">H.264 AVC High Profile @ 90000 timescale</text>
+  <text x="195" y="548" text-anchor="middle" style="fill:rgb(24,95,165);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">Annex B → AVCC 转换，SPS/PPS 提取写入 avcC</text>
+
+  <!-- Audio track box -->
+  <rect x="350" y="495" width="270" height="70" rx="8" stroke-width="0.5" style="fill:rgb(225,245,238);stroke:rgb(15,110,86);"/>
+  <text x="485" y="512" text-anchor="middle" style="fill:rgb(8,80,65);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:12px;font-weight:500;">音频轨 (trak #2)</text>
+  <text x="485" y="530" text-anchor="middle" style="fill:rgb(15,110,86);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">G.711A (alaw) @ 16000 timescale</text>
+  <text x="485" y="548" text-anchor="middle" style="fill:rgb(15,110,86);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">20ms 帧 = 320 samples → 320 bytes/帧</text>
+
+  <!-- Thread model -->
+  <rect x="60" y="580" width="270" height="60" rx="8" stroke-width="0.5" style="fill:rgb(250,236,231);stroke:rgb(153,60,29);"/>
+  <text x="195" y="598" text-anchor="middle" style="fill:rgb(113,43,19);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:12px;font-weight:500;">线程模型</text>
+  <text x="195" y="616" text-anchor="middle" style="fill:rgb(153,60,29);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">cameraLoop 线程 (每摄像头独立)</text>
+  <text x="195" y="630" text-anchor="middle" style="fill:rgb(153,60,29);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">audioLoop 线程 (仅 worker[0])</text>
+
+  <!-- Sync strategy -->
+  <rect x="350" y="580" width="270" height="60" rx="8" stroke-width="0.5" style="fill:rgb(241,239,232);stroke:rgb(95,94,90);"/>
+  <text x="485" y="598" text-anchor="middle" style="fill:rgb(68,68,65);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:12px;font-weight:500;">同步策略</text>
+  <text x="485" y="616" text-anchor="middle" style="fill:rgb(95,94,90);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">音频在第一帧视频编码后启动</text>
+  <text x="485" y="630" text-anchor="middle" style="fill:rgb(95,94,90);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">确保 mdat 中视频数据先于音频</text>
+</g>
+
+<!-- ========== 最下方：文件结构 ========== -->
+<line x1="30" y1="675" x2="690" y2="675" stroke="rgba(31,30,29,0.3)" stroke-width="0.5" stroke-dasharray="4 3"/>
+<text x="360" y="698" text-anchor="middle" style="fill:rgb(20,20,19);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:14px;font-weight:500;">MP4 文件结构（moov-at-end）</text>
+
+<g>
+  <rect x="40" y="720" width="640" height="140" rx="10" stroke-width="0.5" style="fill:rgb(250,248,245);stroke:rgb(130,120,100);"/>
+
+  <!-- File layout timeline -->
+  <rect x="60" y="740" width="80" height="36" rx="4" stroke-width="0.5" style="fill:rgb(238,237,254);stroke:rgb(83,74,183);"/>
+  <text x="100" y="762" text-anchor="middle" dominant-baseline="central" style="fill:rgb(60,52,137);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:500;">ftyp</text>
+  <line x1="140" y1="758" x2="160" y2="758" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.2;"/>
+
+  <rect x="160" y="740" width="80" height="36" rx="4" stroke-width="0.5" style="fill:rgb(230,241,251);stroke:rgb(24,95,165);"/>
+  <text x="200" y="762" text-anchor="middle" dominant-baseline="central" style="fill:rgb(12,68,124);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:500;">mdat header</text>
+  <line x1="240" y1="758" x2="260" y2="758" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.2;"/>
+
+  <rect x="260" y="740" width="200" height="36" rx="4" stroke-width="0.5" style="fill:rgb(225,245,238);stroke:rgb(15,110,86);"/>
+  <text x="360" y="762" text-anchor="middle" dominant-baseline="central" style="fill:rgb(8,80,65);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:500;">mdat 数据区 (H.264 + G.711A 交错写入)</text>
+  <line x1="460" y1="758" x2="480" y2="758" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115,114,108);stroke-width:1.2;"/>
+
+  <rect x="480" y="740" width="80" height="36" rx="4" stroke-width="0.5" style="fill:rgb(250,236,231);stroke:rgb(153,60,29);"/>
+  <text x="520" y="762" text-anchor="middle" dominant-baseline="central" style="fill:rgb(113,43,19);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:500;">moov</text>
+
+  <!-- Details -->
+  <text x="360" y="800" text-anchor="middle" style="fill:rgb(95,94,90);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">finalize() 时：① patch mdat size  ② 写入 moov (mvhd + trak#1 vide + trak#2 soun + stts/stsc/stsz/stco/stss)</text>
+  <text x="360" y="820" text-anchor="middle" style="fill:rgb(95,94,90);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">线程安全：mutex_ 保护文件写入，video_samples_ / audio_samples_ 分别记录每帧的 PTS / size / offset / is_sync</text>
+  <text x="360" y="840" text-anchor="middle" style="fill:rgb(95,94,90);font-family:&quot;Anthropic Sans&quot;,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;font-size:11px;font-weight:400;">输出路径：/userdata/record/cam{N}_{timestamp}_{count}.mp4</text>
+</g>
+</svg>

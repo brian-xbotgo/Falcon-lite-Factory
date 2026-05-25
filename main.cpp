@@ -108,6 +108,14 @@ int main() {
                         rcfg.cameras.push_back(cc);
                     }
                 }
+                if (j.contains("audio") && j["audio"].is_object()) {
+                    auto& a = j["audio"];
+                    if (a.contains("enabled"))     rcfg.audio.enabled     = a["enabled"];
+                    if (a.contains("device"))      rcfg.audio.device      = a["device"];
+                    if (a.contains("sample_rate")) rcfg.audio.sample_rate = a["sample_rate"];
+                    if (a.contains("channels"))    rcfg.audio.channels    = a["channels"];
+                    if (a.contains("gain_db"))     rcfg.audio.gain_db     = a["gain_db"];
+                }
                 if (rcfg.valid()) {
                     ft::RecorderController::instance().setRecorder(
                         ft::createV4l2Recorder(rcfg));

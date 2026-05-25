@@ -1,6 +1,8 @@
 #pragma once
 #include "hal/IRecorder.h"
 #include "hal/MppEncoder.h"
+#include "hal/Mp4Muxer.h"
+#include "hal/AudioCapture.h"
 #include <string>
 #include <vector>
 #include <thread>
@@ -10,6 +12,7 @@
 
 // V4L2-based recorder — platform-independent video capture via Linux V4L2 API.
 // Supports multiple cameras simultaneously, each in its own thread.
+// Includes ALSA audio capture + G.711A encoding + MP4 muxing for the first camera.
 // No Rockchip-specific dependencies.  Coexists with NullRecorder fallback.
 
 namespace ft {
@@ -32,20 +35,21 @@ private:
     struct CameraWorker {
         CameraConfig    cfg;
         int             fd      = -1;
-        FILE*           outfile = nullptr;
         std::thread     thread;
         std::atomic<bool> running{false};
         bool            mplane  = false;  // true if device uses V4L2 multi-plane API
         MppEncoder      encoder;
+        Mp4Muxer        muxer;            // replaces raw fwrite — writes .mp4
+        bool            hasAudio = false;  // true for the first camera (binds audio)
     };
 
     // V4L2 buffer type — auto-selects single vs multi-plane per device
     static unsigned int bufType(const CameraWorker& w);
 
-    bool startCamera(CameraWorker& w);
+    bool startCamera(CameraWorker& w, bool isFirst);
     void cameraLoop(CameraWorker& w);
-    void stopCamera(CameraWorker& w);
-    void writeH264(CameraWorker& w, const uint8_t* data, size_t len);
+    void stopCamera(CameraWorker& w, bool isFirst);
+    void audioLoop();  // audio capture + G.711A encode + muxer feed
 
     // V4L2 low-level helpers
     static bool v4l2Open(const std::string& device, CameraWorker& w);
@@ -59,6 +63,11 @@ private:
     RecorderConfig                              m_cfg;
     std::vector<std::unique_ptr<CameraWorker>>  m_workers;
     std::atomic<bool>                           m_active{false};
+
+    // Audio (shared across cameras — only one mic, bound to worker[0])
+    AudioCapture                  m_audioCapture;
+    std::thread                   m_audioThread;
+    std::atomic<bool>             m_audioRunning{false};
 };
 
 // Factory

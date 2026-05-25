@@ -1,6 +1,16 @@
 {
     "version": 1,
-    "description": "Factory recorder configuration - V4L2-based, platform-independent",
+    "description": "Factory recorder configuration - V4L2-based, platform-independent, with audio",
+    "audio": {
+        "enabled": true,
+        "device": "hw:1,0",
+        "comment_device": "PDM mic array (rockchip,pdm-mic-array) on RV1126B",
+        "sample_rate": 16000,
+        "channels": 1,
+        "gain_db": 30,
+        "comment_gain": "Microphone gain in dB (0 = no change, max 30~40 for PDM mics)",
+        "comment_audio": "16kHz mono, G.711A encoded, muxed into MP4"
+    },
     "cameras": [
         {
             "device": "/dev/video23",
@@ -9,7 +19,7 @@
             "height": 720,
             "format": "NV12",
             "fps": 30,
-            "output": "/userdata/cam0_output.h264",
+            "output": "/userdata/cam0_output.mp4",
             "buffer_count": 4
         },
         {
@@ -19,7 +29,7 @@
             "height": 720,
             "format": "NV12",
             "fps": 30,
-            "output": "/userdata/cam1_output.h264",
+            "output": "/userdata/cam1_output.mp4",
             "buffer_count": 4
         }
     ],
