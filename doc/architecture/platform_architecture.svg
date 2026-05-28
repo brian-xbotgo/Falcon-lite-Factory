@@ -1,0 +1,268 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 1340" width="1060" height="1340">
+  <defs>
+    <style>
+      .title { font-family: 'PingFang SC','Microsoft YaHei',sans-serif; font-size: 18px; font-weight: bold; fill: #1a1a2e; }
+      .subtitle { font-family: 'PingFang SC','Microsoft YaHei',sans-serif; font-size: 13px; font-weight: bold; fill: #333; }
+      .text { font-family: 'PingFang SC','Microsoft YaHei',sans-serif; font-size: 11px; fill: #444; }
+      .text-sm { font-family: 'PingFang SC','Microsoft YaHei',sans-serif; font-size: 10px; fill: #555; }
+      .box { rx: 6; ry: 6; stroke-width: 1.5; }
+      .box-app { fill: #fff3e0; stroke: #e65100; }
+      .box-core { fill: #f3e5f5; stroke: #7b1fa2; }
+      .box-config { fill: #e8f5e9; stroke: #2e7d32; }
+      .box-iface { fill: #e1f5fe; stroke: #0277bd; }
+      .box-plat { fill: #fce4ec; stroke: #ad1457; }
+      .box-hw { fill: #efebe9; stroke: #5d4037; }
+      .arrow { stroke: #888; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead2); }
+      .arrow-dn { stroke: #555; stroke-width: 2; fill: none; marker-end: url(#arrowhead2); }
+      .arrow-lt { stroke: #888; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead2); }
+      .dashed { stroke-dasharray: 5,3; }
+    </style>
+    <marker id="arrowhead2" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#555"/>
+    </marker>
+  </defs>
+
+  <rect width="1060" height="1340" fill="#fafafa"/>
+
+  <!-- ==================== Layer: Application ==================== -->
+  <rect x="20" y="10" width="1020" height="100" class="box box-app"/>
+  <text x="30" y="30" class="subtitle">应用层 (Application) — 通用入口，零平台相关代码</text>
+
+  <rect x="40" y="42" width="980" height="54" rx="4" fill="#ffe0b2" stroke="#ef6c00" stroke-width="1"/>
+  <text x="530" y="60" text-anchor="middle" class="text" font-weight="bold">main.cpp</text>
+  <text x="530" y="76" text-anchor="middle" class="text-sm">1. 解析 configs/&lt;platform&gt;/platform.json  →  2. PlatformFactory::create("rv1126b")  →  3. platform-&gt;init()  →  4. 动态注册测试  →  5. 主循环</text>
+  <text x="530" y="90" text-anchor="middle" class="text-sm">所有资源从 PlatformConfig 读取，不再有任何 GPIO号 / 设备路径 / 芯片型号 硬编码</text>
+
+  <line x1="530" y1="110" x2="530" y2="128" class="arrow-dn"/>
+
+  <!-- ==================== Layer: Core + Config ==================== -->
+  <rect x="20" y="130" width="1020" height="190" class="box box-core"/>
+  <text x="30" y="150" class="subtitle">Core 层 (通用逻辑) + Config 层 (配置驱动)</text>
+
+  <!-- Core left -->
+  <rect x="40" y="162" width="280" height="64" rx="4" fill="#e1bee7" stroke="#8e24aa" stroke-width="1"/>
+  <text x="180" y="180" text-anchor="middle" class="text" font-weight="bold">TestEngine</text>
+  <text x="180" y="196" text-anchor="middle" class="text-sm">MQTT客户端 / 命令路由分发 / 异步任务调度 / LED状态机</text>
+  <text x="180" y="210" text-anchor="middle" class="text-sm">MsgQueue / AsyncTaskQueue (2线程池)</text>
+
+  <rect x="40" y="238" width="280" height="64" rx="4" fill="#e1bee7" stroke="#8e24aa" stroke-width="1"/>
+  <text x="180" y="256" text-anchor="middle" class="text" font-weight="bold">TestRegistry</text>
+  <text x="180" y="272" text-anchor="middle" class="text-sm">动态测试注册: 从 tests.json 加载测试列表</text>
+  <text x="180" y="286" text-anchor="middle" class="text-sm">自注册宏: REGISTER_TEST_MODULE(battery_module)</text>
+
+  <!-- Config right -->
+  <rect x="340" y="162" width="320" height="64" rx="4" fill="#c8e6c9" stroke="#43a047" stroke-width="1"/>
+  <text x="500" y="180" text-anchor="middle" class="text" font-weight="bold">PlatformConfig (JSON配置中心)</text>
+  <text x="500" y="196" text-anchor="middle" class="text-sm">platform.json: GPIO映射 / I2C设备表 / 摄像头参数 / 电机驱动类型</text>
+  <text x="500" y="210" text-anchor="middle" class="text-sm">tests.json: 测试项开关 / topic映射 / async标志 / 平台覆盖参数</text>
+
+  <rect x="340" y="238" width="320" height="64" rx="4" fill="#c8e6c9" stroke="#43a047" stroke-width="1"/>
+  <text x="500" y="256" text-anchor="middle" class="text" font-weight="bold">Common / Protocol (完全通用)</text>
+  <text x="500" y="272" text-anchor="middle" class="text-sm">Types.h: 协议头 / SN-BizID-MsgID / LED模式枚举 / 大端转换</text>
+  <text x="500" y="286" text-anchor="middle" class="text-sm">ShellUtils: 通用封装 (无平台路径硬编码)</text>
+
+  <!-- 3rd party -->
+  <rect x="680" y="162" width="340" height="140" rx="4" fill="#fff9c4" stroke="#f9a825" stroke-width="1"/>
+  <text x="850" y="180" text-anchor="middle" class="text" font-weight="bold">第三方库 (条件链接)</text>
+  <text x="850" y="200" text-anchor="middle" class="text-sm">mosquitto (MQTT)</text>
+  <text x="850" y="216" text-anchor="middle" class="text-sm">nlohmann/json (配置解析)</text>
+  <text x="850" y="232" text-anchor="middle" class="text-sm">LVGL (UI — 可选，平台决定backend)</text>
+  <text x="850" y="248" text-anchor="middle" class="text-sm">rockchip_mpp (RK平台链接)</text>
+  <text x="850" y="264" text-anchor="middle" class="text-sm">ffmpeg/openh264 (软编码备选)</text>
+  <text x="850" y="280" text-anchor="middle" class="text-sm">cJSON / iniparser / 其他工具库</text>
+
+  <line x1="530" y1="320" x2="530" y2="338" class="arrow-dn"/>
+
+  <!-- ==================== Layer: Platform Abstraction ==================== -->
+  <rect x="20" y="340" width="1020" height="220" class="box box-iface"/>
+  <text x="30" y="360" class="subtitle">平台抽象层 (Platform Abstraction) — 纯虚接口，定义跨平台契约</text>
+
+  <!-- Interface boxes -->
+  <rect x="40" y="374" width="180" height="80" rx="4" fill="#b3e5fc" stroke="#0288d1" stroke-width="1.5"/>
+  <text x="130" y="392" text-anchor="middle" class="text" font-weight="bold" fill="#01579b">IPlatform</text>
+  <text x="130" y="408" text-anchor="middle" class="text-sm">init(json config)</text>
+  <text x="130" y="422" text-anchor="middle" class="text-sm">createEncoder() / createCamera()</text>
+  <text x="130" y="436" text-anchor="middle" class="text-sm">createBattery() / createMotor()</text>
+  <text x="130" y="448" text-anchor="middle" class="text-sm">createDisplay()</text>
+
+  <rect x="240" y="374" width="180" height="80" rx="4" fill="#b3e5fc" stroke="#0288d1" stroke-width="1.5"/>
+  <text x="330" y="392" text-anchor="middle" class="text" font-weight="bold" fill="#01579b">IEncoder</text>
+  <text x="330" y="408" text-anchor="middle" class="text-sm">init(cfg) / encode(nv12, out)</text>
+  <text x="330" y="422" text-anchor="middle" class="text-sm">deinit()</text>
+  <text x="330" y="438" text-anchor="middle" class="text-sm">实现: RkMppEncoder / SoftEncoder</text>
+
+  <rect x="440" y="374" width="180" height="80" rx="4" fill="#b3e5fc" stroke="#0288d1" stroke-width="1.5"/>
+  <text x="530" y="392" text-anchor="middle" class="text" font-weight="bold" fill="#01579b">ICameraDriver</text>
+  <text x="530" y="408" text-anchor="middle" class="text-sm">probe() / checkOtp()</text>
+  <text x="530" y="422" text-anchor="middle" class="text-sm">getStatus() / readRegister()</text>
+  <text x="530" y="438" text-anchor="middle" class="text-sm">实现: Gc4663Driver / UsbUvcDriver</text>
+
+  <rect x="640" y="374" width="180" height="80" rx="4" fill="#b3e5fc" stroke="#0288d1" stroke-width="1.5"/>
+  <text x="730" y="392" text-anchor="middle" class="text" font-weight="bold" fill="#01579b">IBatteryDriver</text>
+  <text x="730" y="408" text-anchor="middle" class="text-sm">readVoltage() / getPercent()</text>
+  <text x="730" y="422" text-anchor="middle" class="text-sm">getStatus()</text>
+  <text x="730" y="438" text-anchor="middle" class="text-sm">实现: Cw221xDriver / BqDriver</text>
+
+  <rect x="840" y="374" width="180" height="80" rx="4" fill="#b3e5fc" stroke="#0288d1" stroke-width="1.5"/>
+  <text x="930" y="392" text-anchor="middle" class="text" font-weight="bold" fill="#01579b">IMotorDriver</text>
+  <text x="930" y="408" text-anchor="middle" class="text-sm">init() / move(dir, angle)</text>
+  <text x="930" y="422" text-anchor="middle" class="text-sm">stop() / getPosition()</text>
+  <text x="930" y="438" text-anchor="middle" class="text-sm">实现: Tmi8152Driver / StepDrv</text>
+
+  <rect x="240" y="468" width="180" height="76" rx="4" fill="#b3e5fc" stroke="#0288d1" stroke-width="1.5"/>
+  <text x="330" y="486" text-anchor="middle" class="text" font-weight="bold" fill="#01579b">IDisplayDriver</text>
+  <text x="330" y="502" text-anchor="middle" class="text-sm">init() / taskHandler()</text>
+  <text x="330" y="516" text-anchor="middle" class="text-sm">setBatteryPercent() / deinit()</text>
+  <text x="330" y="532" text-anchor="middle" class="text-sm">实现: LvglFbDriver / DrmDriver</text>
+
+  <rect x="440" y="468" width="180" height="76" rx="4" fill="#b3e5fc" stroke="#0288d1" stroke-width="1.5"/>
+  <text x="530" y="486" text-anchor="middle" class="text" font-weight="bold" fill="#01579b">IHallDriver</text>
+  <text x="530" y="502" text-anchor="middle" class="text-sm">init() / read()</text>
+  <text x="530" y="516" text-anchor="middle" class="text-sm">isUpperLimit() / isLowerLimit()</text>
+  <text x="530" y="532" text-anchor="middle" class="text-sm">实现: GpioHallDriver / AdcHallDriver</text>
+
+  <rect x="640" y="468" width="180" height="76" rx="4" fill="#b3e5fc" stroke="#0288d1" stroke-width="1.5"/>
+  <text x="730" y="486" text-anchor="middle" class="text" font-weight="bold" fill="#01579b">IRecorder</text>
+  <text x="730" y="502" text-anchor="middle" class="text-sm">start(cmd) / stop()</text>
+  <text x="730" y="516" text-anchor="middle" class="text-sm">isRecording()</text>
+  <text x="730" y="532" text-anchor="middle" class="text-sm">实现: V4l2Recorder / NullRecorder</text>
+
+  <rect x="840" y="468" width="180" height="76" rx="4" fill="#b3e5fc" stroke="#0288d1" stroke-width="1.5"/>
+  <text x="930" y="486" text-anchor="middle" class="text" font-weight="bold" fill="#01579b">IGpioDriver</text>
+  <text x="930" y="502" text-anchor="middle" class="text-sm">exportGpio() / setDirection()</text>
+  <text x="930" y="516" text-anchor="middle" class="text-sm">write() / read()</text>
+  <text x="930" y="532" text-anchor="middle" class="text-sm">实现: SysfsGpioDriver / LibgpiodDriver</text>
+
+  <line x1="530" y1="560" x2="530" y2="578" class="arrow-dn"/>
+
+  <!-- ==================== Layer: Platform Implementations ==================== -->
+  <rect x="20" y="580" width="1020" height="280" class="box box-plat"/>
+  <text x="30" y="600" class="subtitle">平台实现层 (Platform Implementations) — 一平台一目录，编译时选择</text>
+
+  <!-- Platform: rv1126b -->
+  <rect x="40" y="614" width="300" height="230" rx="4" fill="#f8bbd0" stroke="#c2185b" stroke-width="1.5"/>
+  <text x="190" y="632" text-anchor="middle" class="subtitle" fill="#880e4f">platforms/rv1126b/</text>
+
+  <rect x="55" y="644" width="130" height="44" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1"/>
+  <text x="120" y="662" text-anchor="middle" class="text" font-weight="bold">Rv1126bPlatform</text>
+  <text x="120" y="678" text-anchor="middle" class="text-sm">实现 IPlatform 工厂</text>
+
+  <rect x="195" y="644" width="130" height="44" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1"/>
+  <text x="260" y="662" text-anchor="middle" class="text" font-weight="bold">RkMppEncoder</text>
+  <text x="260" y="678" text-anchor="middle" class="text-sm">实现 IEncoder (MPP)</text>
+
+  <rect x="55" y="700" width="130" height="44" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1"/>
+  <text x="120" y="718" text-anchor="middle" class="text" font-weight="bold">Gc4663CameraDrv</text>
+  <text x="120" y="734" text-anchor="middle" class="text-sm">实现 ICameraDriver</text>
+
+  <rect x="195" y="700" width="130" height="44" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1"/>
+  <text x="260" y="718" text-anchor="middle" class="text" font-weight="bold">Cw221xBatteryDrv</text>
+  <text x="260" y="734" text-anchor="middle" class="text-sm">实现 IBatteryDriver</text>
+
+  <rect x="55" y="756" width="130" height="44" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1"/>
+  <text x="120" y="774" text-anchor="middle" class="text" font-weight="bold">Tmi8152MotorDrv</text>
+  <text x="120" y="790" text-anchor="middle" class="text-sm">实现 IMotorDriver</text>
+
+  <rect x="195" y="756" width="130" height="44" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1"/>
+  <text x="260" y="774" text-anchor="middle" class="text" font-weight="bold">LvglFbDisplay</text>
+  <text x="260" y="790" text-anchor="middle" class="text-sm">实现 IDisplayDriver</text>
+
+  <rect x="55" y="812" width="270" height="22" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1"/>
+  <text x="190" y="827" text-anchor="middle" class="text-sm">SysfsGpioDriver / HallGpioDriver / V4l2Recorder</text>
+
+  <!-- Platform: rk3588 (future) -->
+  <rect x="360" y="614" width="300" height="230" rx="4" fill="#f8bbd0" stroke="#c2185b" stroke-width="1.5" opacity="0.6"/>
+  <text x="510" y="632" text-anchor="middle" class="subtitle" fill="#880e4f">platforms/rk3588/ (未来扩展)</text>
+
+  <rect x="375" y="660" width="130" height="40" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1" opacity="0.6"/>
+  <text x="440" y="678" text-anchor="middle" class="text" font-weight="bold">Rk3588Platform</text>
+  <text x="440" y="692" text-anchor="middle" class="text-sm">实现 IPlatform</text>
+
+  <rect x="515" y="660" width="130" height="40" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1" opacity="0.6"/>
+  <text x="580" y="678" text-anchor="middle" class="text" font-weight="bold">RkMppEncoderV2</text>
+  <text x="580" y="692" text-anchor="middle" class="text-sm">RK3588 MPP</text>
+
+  <rect x="375" y="720" width="270" height="40" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1" opacity="0.6"/>
+  <text x="510" y="738" text-anchor="middle" class="text" font-weight="bold">Imx415CameraDrv / Os08a20CameraDrv</text>
+  <text x="510" y="752" text-anchor="middle" class="text-sm">不同摄像头驱动实现 ICameraDriver</text>
+
+  <rect x="375" y="780" width="270" height="40" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1" opacity="0.6"/>
+  <text x="510" y="798" text-anchor="middle" class="text" font-weight="bold">DrmDisplay / WaylandDisplay</text>
+  <text x="510" y="812" text-anchor="middle" class="text-sm">实现 IDisplayDriver (替代LVGL framebuffer)</text>
+
+  <!-- Platform: common/null -->
+  <rect x="680" y="614" width="340" height="230" rx="4" fill="#f8bbd0" stroke="#c2185b" stroke-width="1.5" opacity="0.45"/>
+  <text x="850" y="632" text-anchor="middle" class="subtitle" fill="#880e4f">platforms/common/ (通用回退)</text>
+
+  <rect x="695" y="660" width="150" height="40" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1" opacity="0.5"/>
+  <text x="770" y="678" text-anchor="middle" class="text" font-weight="bold">NullPlatform</text>
+  <text x="770" y="692" text-anchor="middle" class="text-sm">x86 CI测试用</text>
+
+  <rect x="855" y="660" width="150" height="40" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1" opacity="0.5"/>
+  <text x="930" y="678" text-anchor="middle" class="text" font-weight="bold">SoftEncoder</text>
+  <text x="930" y="692" text-anchor="middle" class="text-sm">ffmpeg/openh264软编</text>
+
+  <rect x="695" y="720" width="310" height="40" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1" opacity="0.5"/>
+  <text x="850" y="738" text-anchor="middle" class="text" font-weight="bold">NullCamera / NullBattery / NullMotor / NullDisplay</text>
+  <text x="850" y="752" text-anchor="middle" class="text-sm">所有接口的空实现，用于协议层单元测试</text>
+
+  <rect x="695" y="780" width="310" height="40" rx="4" fill="#f48fb1" stroke="#ad1457" stroke-width="1" opacity="0.5"/>
+  <text x="850" y="798" text-anchor="middle" class="text" font-weight="bold">DummyGpioDriver / DummyHallDriver</text>
+  <text x="850" y="812" text-anchor="middle" class="text-sm">模拟硬件响应，支持自动化测试</text>
+
+  <line x1="530" y1="860" x2="530" y2="878" class="arrow-dn"/>
+
+  <!-- ==================== Layer: Hardware ==================== -->
+  <rect x="20" y="880" width="1020" height="200" class="box box-hw"/>
+  <text x="30" y="900" class="subtitle">硬件层 (Hardware) — 平台实现直接对接具体 Kernel 驱动</text>
+
+  <rect x="40" y="914" width="140" height="60" rx="4" fill="#d7ccc8" stroke="#6d4c41" stroke-width="1"/>
+  <text x="110" y="934" text-anchor="middle" class="text" font-weight="bold">RV1126B</text>
+  <text x="110" y="950" text-anchor="middle" class="text-sm">Cortex-A7 + NPU</text>
+  <text x="110" y="964" text-anchor="middle" class="text-sm">RK MPP / MIPI-CSI</text>
+
+  <rect x="200" y="914" width="140" height="60" rx="4" fill="#d7ccc8" stroke="#6d4c41" stroke-width="1"/>
+  <text x="270" y="934" text-anchor="middle" class="text" font-weight="bold">RK3588 (未来)</text>
+  <text x="270" y="950" text-anchor="middle" class="text-sm">Cortex-A76 + NPU</text>
+  <text x="270" y="964" text-anchor="middle" class="text-sm">MPP v2 / DRM显示</text>
+
+  <rect x="360" y="914" width="140" height="60" rx="4" fill="#d7ccc8" stroke="#6d4c41" stroke-width="1"/>
+  <text x="430" y="934" text-anchor="middle" class="text" font-weight="bold">x86/Linux (CI)</text>
+  <text x="430" y="950" text-anchor="middle" class="text-sm">Null硬件</text>
+  <text x="430" y="964" text-anchor="middle" class="text-sm">MQTT协议层自动化测试</text>
+
+  <rect x="40" y="994" width="460" height="36" rx="4" fill="#efebe9" stroke="#5d4037" stroke-width="1"/>
+  <text x="270" y="1012" text-anchor="middle" class="text-sm">Camera: GC4663 / IMX415 / OS08A20 / USB UVC  |  Battery: CW221X / BQ系列  |  Motor: TMI8152 / 其他步进驱动</text>
+  <text x="270" y="1024" text-anchor="middle" class="text-sm">Display: LVGL+FB / DRM / Wayland  |  GPIO: sysfs / libgpiod  |  Hall: GPIO中断 / ADC</text>
+
+  <rect x="520" y="994" width="520" height="36" rx="4" fill="#efebe9" stroke="#5d4037" stroke-width="1"/>
+  <text x="780" y="1012" text-anchor="middle" class="text-sm">构建命令: cmake -DTARGET_PLATFORM=rv1126b ..  |  cmake -DTARGET_PLATFORM=rk3588 ..  |  cmake -DTARGET_PLATFORM=null ..</text>
+  <text x="780" y="1024" text-anchor="middle" class="text-sm">CMake 根据平台选择源码目录 + 链接不同库 (rockchip_mpp / ffmpeg / stub)</text>
+
+  <!-- Title -->
+  <text x="530" y="1110" text-anchor="middle" class="title">平台化目标架构图 — 配置驱动 + 接口抽象 + 平台插件</text>
+  <text x="530" y="1132" text-anchor="middle" class="text-sm" fill="#666">蓝色框 = 纯虚接口（跨平台契约） |  粉色框 = 平台专用实现（可替换） |  绿色框 = 配置驱动（零代码改硬件）</text>
+
+  <!-- Legend -->
+  <rect x="40" y="1150" width="140" height="22" rx="4" fill="#fff3e0" stroke="#e65100" stroke-width="1"/>
+  <text x="110" y="1165" text-anchor="middle" class="text-sm">应用层</text>
+  <rect x="190" y="1150" width="140" height="22" rx="4" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="1"/>
+  <text x="260" y="1165" text-anchor="middle" class="text-sm">Core层</text>
+  <rect x="340" y="1150" width="140" height="22" rx="4" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1"/>
+  <text x="410" y="1165" text-anchor="middle" class="text-sm">Config层</text>
+  <rect x="490" y="1150" width="140" height="22" rx="4" fill="#e1f5fe" stroke="#0277bd" stroke-width="1"/>
+  <text x="560" y="1165" text-anchor="middle" class="text-sm">接口层</text>
+  <rect x="640" y="1150" width="140" height="22" rx="4" fill="#fce4ec" stroke="#ad1457" stroke-width="1"/>
+  <text x="710" y="1165" text-anchor="middle" class="text-sm">平台实现</text>
+  <rect x="790" y="1150" width="140" height="22" rx="4" fill="#efebe9" stroke="#5d4037" stroke-width="1"/>
+  <text x="860" y="1165" text-anchor="middle" class="text-sm">硬件层</text>
+
+  <!-- Key benefits -->
+  <rect x="40" y="1190" width="980" height="100" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="530" y="1212" text-anchor="middle" class="subtitle" fill="#1b5e20">平台化核心收益</text>
+  <text x="60" y="1234" class="text-sm" fill="#2e7d32">✓ 新SoC适配: 实现 IPlatform 接口即可，2-4周完成 (vs 现在2-3个月重写)</text>
+  <text x="60" y="1252" class="text-sm" fill="#2e7d32">✓ 硬件改版: 换摄像头/电池/电机 = 改配置 + 新driver，框架零改动</text>
+  <text x="540" y="1234" class="text-sm" fill="#2e7d32">✓ CI测试: x86 + NullPlatform 可跑通全部 MQTT 协议层单元测试</text>
+  <text x="540" y="1252" class="text-sm" fill="#2e7d32">✓ 并行开发: 平台团队与测试团队解耦，接口契约驱动开发</text>
+  <text x="60" y="1274" class="text-sm" fill="#2e7d32">✓ 回归安全: 每阶段保持 RV1126B 全量产测通过，逐步替换无风险</text>
+</svg>
