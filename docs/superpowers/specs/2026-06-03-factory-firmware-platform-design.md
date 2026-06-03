@@ -1,6 +1,6 @@
 # 产测固件平台化设计文档
 
-> 版本: v1.1
+> 版本: v1.2
 > 日期: 2026-06-03
 > 范围: 从 RV1126B 专用固件演进为跨平台产测框架
 > 权威来源: `产测固件架构.docx`（根目录）
@@ -154,10 +154,11 @@ factory_fw/                        ← 未来独立仓库根（可整体搬走�
 │       └── NullWifiManager.cpp
 │
 ├── platforms/
-│   └── falcon/                    # 平台单元
+│   └── falcon/                    # Falcon (RV1126B)
 │       ├── CMakeLists.txt         # 自包含 CMake（独立/聚合两用）
 │       ├── build_factory.sh       # 平台打包脚本
-│       ├── platform.json          # 硬件资源配置
+│       ├── platform.json          # ★ 硬件资源配置（平台层自维护）
+│       ├── tests.json             # ★ 测试项注册表（平台层自维护）
 │       └── drivers/               # 平台 driver 实现
 │           ├── RkMppEncoder.cpp
 │           ├── Gc4663CameraDriver.cpp
@@ -185,6 +186,7 @@ factory_fw/                        ← 未来独立仓库根（可整体搬走�
 - `build.sh` 以 `SCRIPT_DIR` 为根，不依赖调用者 CWD
 - `main.cpp` 位于 `src/`，唯一一份通用入口
 - 平台 driver 目录命名 `drivers/`（与通用 `hal/` 区分）
+- **配置文件放在平台层**：`platforms/<platform>/platform.json` + `platforms/<platform>/tests.json`，各平台自维护
 - 构建产物落在 `build/${PLATFORM}/`，不污染源码树
 
 ### 3.3 build.sh
@@ -280,7 +282,7 @@ target_link_libraries(factory_test
 )
 ```
 
-### 3.6 main.cpp
+### 3.6 main.cpp（唯一一份通用入口）
 
 ```cpp
 #include "config/PlatformConfig.h"
@@ -288,6 +290,7 @@ target_link_libraries(factory_test
 #include "core/TestEngine.h"
 #include "core/ModuleRegistry.h"
 #include "platforms/common/interface/IPlatform.h"
+#include "platforms/common/interface/IDisplayDriver.h"
 
 int main() {
     auto& cfg = PlatformConfig::instance();
@@ -296,6 +299,11 @@ int main() {
     auto platform = ft::createPlatform(cfg.platformName());
     if (!platform || !platform->init(cfg.raw())) return -1;
 
+    // 直接工厂创建：初始化显示（不走 registry，main.cpp 显式控制生命周期）
+    auto display = platform->createDisplayDriver();
+    if (display) display->init();
+
+    // 注册表注入：供 TestContext 动态查找
     ft::DriverRegistry reg;
     platform->registerDrivers(reg);
 
@@ -311,7 +319,18 @@ int main() {
 
 ## 4. 核心注册机制
 
-### 4.1 FactoryStore
+### 4.1 设计核心：平台双注册
+
+平台通过 **两种正交机制** 向上层暴露硬件能力：
+
+| 机制 | 用途 | 调用方 |
+|------|------|--------|
+| `createXxx()` 工厂方法 | `main.cpp` 显式创建组件（display、recorder 等），生命周期由 main 控制 | `main.cpp` |
+| `registerDrivers()` 注册表 | `TestContext` 动态驱动查找，测试模块通过接口操作硬件 | `TestContext` |
+
+两者并存，互不替代：`createXxx()` 用于启动期显式初始化，`registerDrivers()` 用于运行期动态解耦。
+
+### 4.2 FactoryStore
 
 ```cpp
 // include/core/FactoryStore.h
@@ -346,7 +365,7 @@ private:
 } // namespace ft
 ```
 
-### 4.2 DriverRegistry
+### 4.3 DriverRegistry
 
 ```cpp
 // include/core/DriverRegistry.h
@@ -385,14 +404,25 @@ private:
 } // namespace ft
 ```
 
-### 4.3 IPlatform
+### 4.4 IPlatform — 双注册契约
 
 ```cpp
 // include/platforms/common/interface/IPlatform.h
 #pragma once
 #include <nlohmann/json.hpp>
+#include <memory>
 
 namespace ft {
+
+class IEncoder;
+class ICameraDriver;
+class IBatteryDriver;
+class IMotorDriver;
+class IHallDriver;
+class IDisplayDriver;
+class IGpioDriver;
+class IRecorder;
+class IWifiManager;
 class DriverRegistry;
 
 class IPlatform {
@@ -400,6 +430,19 @@ public:
     virtual ~IPlatform() = default;
     virtual bool init(const nlohmann::json& config) = 0;
     virtual const char* name() const = 0;
+
+    // === 机制 A：工厂方法（main.cpp 显式创建） ===
+    virtual std::unique_ptr<IEncoder>       createEncoder()       = 0;
+    virtual std::unique_ptr<ICameraDriver>  createCameraDriver()  = 0;
+    virtual std::unique_ptr<IBatteryDriver> createBatteryDriver() = 0;
+    virtual std::unique_ptr<IMotorDriver>   createMotorDriver()   = 0;
+    virtual std::unique_ptr<IHallDriver>    createHallDriver()    = 0;
+    virtual std::unique_ptr<IDisplayDriver> createDisplayDriver() = 0;
+    virtual std::unique_ptr<IGpioDriver>    createGpioDriver()    = 0;
+    virtual std::unique_ptr<IRecorder>      createRecorder()      = 0;
+    virtual std::unique_ptr<IWifiManager>   createWifiManager()   = 0;
+
+    // === 机制 B：注册表（TestContext 动态查找） ===
     virtual void registerDrivers(DriverRegistry& reg) = 0;
 
     virtual const char* gpuTestPath() const    { return nullptr; }
@@ -415,19 +458,30 @@ std::unique_ptr<IPlatform> createPlatform(const char* name);
 } // namespace ft
 ```
 
-### 4.4 平台侧登记示例
+### 4.5 平台侧实现示例
 
 ```cpp
-void Rv1126bPlatform::registerDrivers(DriverRegistry& reg) {
+// platforms/falcon/drivers/...
+// platforms/falcon/FalconPlatform.cpp
+
+std::unique_ptr<IEncoder> FalconPlatform::createEncoder() {
+    return std::make_unique<RkMppEncoder>();
+}
+std::unique_ptr<IDisplayDriver> FalconPlatform::createDisplayDriver() {
+    return std::make_unique<LvglDisplayDriver>();
+}
+// ... 其他 createXxx()
+
+void FalconPlatform::registerDrivers(DriverRegistry& reg) {
     reg.bind<IEncoder>      ([] { return std::make_unique<RkMppEncoder>(); });
     reg.bind<ICameraDriver> ([] { return std::make_unique<Gc4663CameraDriver>(); });
     reg.bind<IBatteryDriver>([] { return std::make_unique<Cw221xBatteryDriver>(); });
     reg.bind<IGpioDriver>   ([] { return std::make_unique<SysfsGpioDriver>(); });
-    // 平台没有电机 → 不 bind<IMotorDriver>()，上层 create<IMotorDriver>() 返回 nullptr
+    // 平台没有电机 → 不 bind<IMotorDriver>()
 }
 ```
 
-### 4.5 ModuleRegistry
+### 4.6 ModuleRegistry
 
 ```cpp
 // include/core/ModuleRegistry.h
@@ -536,7 +590,9 @@ public:
         : drivers_(drivers), config_(cfg), params_(std::move(params)) {}
 
     template<class I>
-    std::unique_ptr<I> create() const { return drivers_.create<I>(); }
+    std::unique_ptr<I> create() const {
+        return drivers_.create<I>();
+    }
 
     const PlatformConfig& config() const { return config_; }
     const nlohmann::json& params() const { return params_; }
@@ -625,9 +681,10 @@ void TestEngine::dispatch(const std::string& topic,
 
 **线程安全**：`TestEngine` 内部持 `std::mutex mqttMutex_`。`publishResult` 内加锁后调用 `mosquitto_publish`，串行化 sync 分支（MQTT 回调线程）与 async 分支（worker 线程）的 publish 调用。
 
-### 5.4 tests.json 驱动调度
+### 5.4 tests.json 驱动调度（平台层自维护）
 
 ```json
+// platforms/falcon/tests.json
 {
   "version": 1,
   "tests": [
@@ -643,7 +700,7 @@ void TestEngine::dispatch(const std::string& topic,
 
 | 操作 | 方式 | core 改动 |
 |---|---|---|
-| 增加测试 | 新增 `src/tests/XxxTest.cpp` + `REGISTER_TEST_MODULE("xxx", XxxTest)` + `tests.json` 加一行 | 零 |
+| 增加测试 | 新增 `src/tests/XxxTest.cpp` + `REGISTER_TEST_MODULE("xxx", XxxTest)` + `platforms/<platform>/tests.json` 加一行 | 零 |
 | 改 topic 绑定 | 改 `tests.json` 里的 `topic` 字段 | 零 |
 | 同一模块多 topic | `tests.json` 里多行指向同一 `module`，带不同 `params` | 零 |
 | 修改测试 | 只改对应那一个 `.cpp` | 零 |
@@ -732,5 +789,5 @@ fi
 | G | 确认 mosquitto 构建/循环模式的线程安全 | 测试框架 | 中 |
 | H | `TestResult` 统一走工厂方法，不留裸聚合初始化 | 测试框架 | 低 |
 | I | 工具链文件从 `FALCON_SDK` 环境变量定位 | 依赖管理 | 高 |
-| J | 第三方依赖获取方式明确（find_package / FetchContent / git submodule） | 依赖管理 | 高 |
+| J | 第三方依赖获取方式明确 | 依赖管理 | 高 |
 | K | CI 隔离构建测试 + grep 独立性守卫钩子 | 独立性守卫 | 中 |
