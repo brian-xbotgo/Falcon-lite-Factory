@@ -442,6 +442,7 @@ void Rv1126bPlatform::registerDrivers(DriverRegistry& reg) {
     reg.bind<IBatteryDriver>([] { return std::make_unique<Cw221xBatteryDriver>(); });
     reg.bind<IGpioDriver>   ([] { return std::make_unique<SysfsGpioDriver>(); });
     reg.bind<IDisplayDriver>([] { return std::make_unique<LvglDisplayDriver>(); });
+    // 约定：display 为 main 独占的长生命周期组件，测试模块不应 ctx.create<IDisplayDriver>()
     // 平台没有电机 → 不 bind<IMotorDriver>()，上层 create<IMotorDriver>() 返回 nullptr
 }
 ```
@@ -612,11 +613,11 @@ public:
 
     template<class F>
     auto enqueueAndWait(F&& task) -> decltype(task()) {
-        using ResultType = decltype(task());
-        std::packaged_task<ResultType()> pt(std::forward<F>(task));
-        std::future<ResultType> fut = pt.get_future();
-        enqueue([&pt]() mutable { pt(); });
-        return fut.get();   // 阻塞等待结果
+        using R = decltype(task());
+        auto pt = std::make_shared<std::packaged_task<R()>>(std::forward<F>(task));
+        std::future<R> fut = pt->get_future();
+        enqueue([pt]() { (*pt)(); });   // shared_ptr 自持，无栈耦合
+        return fut.get();
     }
 
 private:
@@ -629,7 +630,7 @@ private:
 ### 5.4 TestEngine 调度、并发模型与异常契约
 
 **并发语义（冻结点）**：
-> `AsyncTaskQueue` 为**单 worker 线程**。所有测试（无论 sync/async）均入队由该 worker **串行执行**。sync 测试 `enqueueAndWait` 阻塞等待结果；async 测试 `enqueue` 后立即返回。此设计确保：① 回调线程不被长测试阻塞，MQTT 消息持续接收；② 所有硬件访问（I2C、V4L2、GPIO、Motor SPI）由架构保证串行，无需外部协议假设。
+> `AsyncTaskQueue` 为**单 worker 线程**。所有测试（无论 sync/async）均入队由该 worker **串行执行**。async 测试 `enqueue` 后立即返回，不阻塞回调线程；sync 测试 `enqueueAndWait` 按设计阻塞回调线程直至完成。此设计确保：① async 不阻塞 MQTT 消息接收；② 所有硬件访问（I2C、V4L2、GPIO、Motor SPI）由架构保证串行，无需外部协议假设。
 
 **异常契约（冻结点）**：
 > `dispatch` 对 `testCfg` 的访问和 `mod->run()` 的执行均受异常守卫保护。任何异常（包括非 `std::exception` 派生类型）都被捕获为 `TestResult::fail`，worker 线程永不崩溃。
