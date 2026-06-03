@@ -1,6 +1,6 @@
 # 产测固件平台化设计文档
 
-> 版本: v1.2
+> 版本: v1.3
 > 日期: 2026-06-03
 > 范围: 从 RV1126B 专用固件演进为跨平台产测框架
 > 权威来源: `产测固件架构.docx`（根目录）
@@ -166,7 +166,6 @@ factory_fw/                        ← 未来独立仓库根（可整体搬走�
 │           ├── Tmi8152MotorDriver.cpp
 │           ├── HallSwitchDriver.cpp
 │           ├── LvglDisplayDriver.cpp
-│           ├── SysfsGpioDriver.cpp
 │           ├── Rv1126bRecorder.cpp
 │           └── Rv1126bWifiManager.cpp
 │
@@ -263,7 +262,6 @@ set(FALCON_DRIVER_SRCS
     drivers/Tmi8152MotorDriver.cpp
     drivers/HallSwitchDriver.cpp
     drivers/LvglDisplayDriver.cpp
-    drivers/SysfsGpioDriver.cpp
     drivers/Rv1126bRecorder.cpp
     drivers/Rv1126bWifiManager.cpp
 )
@@ -288,7 +286,6 @@ target_link_libraries(factory_test
 #include "config/PlatformConfig.h"
 #include "core/DriverRegistry.h"
 #include "core/TestEngine.h"
-#include "core/ModuleRegistry.h"
 #include "platforms/common/interface/IPlatform.h"
 #include "platforms/common/interface/IDisplayDriver.h"
 
@@ -299,13 +296,13 @@ int main() {
     auto platform = ft::createPlatform(cfg.platformName());
     if (!platform || !platform->init(cfg.raw())) return -1;
 
-    // 直接工厂创建：初始化显示（不走 registry，main.cpp 显式控制生命周期）
-    auto display = platform->createDisplayDriver();
-    if (display) display->init();
-
-    // 注册表注入：供 TestContext 动态查找
+    // 驱动注册表：平台登记自己拥有的能力
     ft::DriverRegistry reg;
     platform->registerDrivers(reg);
+
+    // main 直接取 display（长生命周期组件，main 持有）
+    auto display = reg.create<IDisplayDriver>();
+    if (display) display->init();
 
     ft::TestEngine engine(reg, cfg);
     engine.loadTestConfig("/oem/usr/conf/tests.json");
@@ -319,16 +316,16 @@ int main() {
 
 ## 4. 核心注册机制
 
-### 4.1 设计核心：平台双注册
+### 4.1 设计核心：双注册
 
-平台通过 **两种正交机制** 向上层暴露硬件能力：
+系统中存在 **两个正交注册表**，索引两个不同维度：
 
-| 机制 | 用途 | 调用方 |
-|------|------|--------|
-| `createXxx()` 工厂方法 | `main.cpp` 显式创建组件（display、recorder 等），生命周期由 main 控制 | `main.cpp` |
-| `registerDrivers()` 注册表 | `TestContext` 动态驱动查找，测试模块通过接口操作硬件 | `TestContext` |
+| 注册表 | 维度 | 键类型 | 用途 |
+|--------|------|--------|------|
+| `DriverRegistry` | 硬件能力 | `std::type_index` | 平台登记自己拥有的 driver，测试模块通过 `TestContext::create<I>()` 获取 |
+| `ModuleRegistry` | 测试方法 | `std::string`（module 名） | 测试模块通过 `REGISTER_TEST_MODULE` 宏自注册，`TestEngine` 按 topic 派发 |
 
-两者并存，互不替代：`createXxx()` 用于启动期显式初始化，`registerDrivers()` 用于运行期动态解耦。
+两者共享薄基座 `FactoryStore`，但语义外壳独立，不强行合并。
 
 ### 4.2 FactoryStore
 
@@ -404,25 +401,14 @@ private:
 } // namespace ft
 ```
 
-### 4.4 IPlatform — 双注册契约
+### 4.4 IPlatform
 
 ```cpp
 // include/platforms/common/interface/IPlatform.h
 #pragma once
 #include <nlohmann/json.hpp>
-#include <memory>
 
 namespace ft {
-
-class IEncoder;
-class ICameraDriver;
-class IBatteryDriver;
-class IMotorDriver;
-class IHallDriver;
-class IDisplayDriver;
-class IGpioDriver;
-class IRecorder;
-class IWifiManager;
 class DriverRegistry;
 
 class IPlatform {
@@ -431,18 +417,7 @@ public:
     virtual bool init(const nlohmann::json& config) = 0;
     virtual const char* name() const = 0;
 
-    // === 机制 A：工厂方法（main.cpp 显式创建） ===
-    virtual std::unique_ptr<IEncoder>       createEncoder()       = 0;
-    virtual std::unique_ptr<ICameraDriver>  createCameraDriver()  = 0;
-    virtual std::unique_ptr<IBatteryDriver> createBatteryDriver() = 0;
-    virtual std::unique_ptr<IMotorDriver>   createMotorDriver()   = 0;
-    virtual std::unique_ptr<IHallDriver>    createHallDriver()    = 0;
-    virtual std::unique_ptr<IDisplayDriver> createDisplayDriver() = 0;
-    virtual std::unique_ptr<IGpioDriver>    createGpioDriver()    = 0;
-    virtual std::unique_ptr<IRecorder>      createRecorder()      = 0;
-    virtual std::unique_ptr<IWifiManager>   createWifiManager()   = 0;
-
-    // === 机制 B：注册表（TestContext 动态查找） ===
+    // 核心：平台把自己拥有的 driver 按接口类型登记进 registry
     virtual void registerDrivers(DriverRegistry& reg) = 0;
 
     virtual const char* gpuTestPath() const    { return nullptr; }
@@ -458,26 +433,16 @@ std::unique_ptr<IPlatform> createPlatform(const char* name);
 } // namespace ft
 ```
 
-### 4.5 平台侧实现示例
+### 4.5 平台侧登记示例
 
 ```cpp
-// platforms/falcon/drivers/...
-// platforms/falcon/FalconPlatform.cpp
-
-std::unique_ptr<IEncoder> FalconPlatform::createEncoder() {
-    return std::make_unique<RkMppEncoder>();
-}
-std::unique_ptr<IDisplayDriver> FalconPlatform::createDisplayDriver() {
-    return std::make_unique<LvglDisplayDriver>();
-}
-// ... 其他 createXxx()
-
-void FalconPlatform::registerDrivers(DriverRegistry& reg) {
+void Rv1126bPlatform::registerDrivers(DriverRegistry& reg) {
     reg.bind<IEncoder>      ([] { return std::make_unique<RkMppEncoder>(); });
     reg.bind<ICameraDriver> ([] { return std::make_unique<Gc4663CameraDriver>(); });
     reg.bind<IBatteryDriver>([] { return std::make_unique<Cw221xBatteryDriver>(); });
     reg.bind<IGpioDriver>   ([] { return std::make_unique<SysfsGpioDriver>(); });
-    // 平台没有电机 → 不 bind<IMotorDriver>()
+    reg.bind<IDisplayDriver>([] { return std::make_unique<LvglDisplayDriver>(); });
+    // 平台没有电机 → 不 bind<IMotorDriver>()，上层 create<IMotorDriver>() 返回 nullptr
 }
 ```
 
@@ -631,13 +596,43 @@ REGISTER_TEST_MODULE("camera", CameraTest);
 } // namespace ft
 ```
 
-### 5.3 TestEngine 调度、并发模型与异常契约
+### 5.3 AsyncTaskQueue 接口
+
+```cpp
+// include/core/AsyncTaskQueue.h
+#pragma once
+#include <functional>
+#include <future>
+
+namespace ft {
+
+class AsyncTaskQueue {
+public:
+    void enqueue(std::function<void()> task);   // async：发了就走
+
+    template<class F>
+    auto enqueueAndWait(F&& task) -> decltype(task()) {
+        using ResultType = decltype(task());
+        std::packaged_task<ResultType()> pt(std::forward<F>(task));
+        std::future<ResultType> fut = pt.get_future();
+        enqueue([&pt]() mutable { pt(); });
+        return fut.get();   // 阻塞等待结果
+    }
+
+private:
+    // 内部：单 worker 线程 + std::queue + condition_variable
+};
+
+} // namespace ft
+```
+
+### 5.4 TestEngine 调度、并发模型与异常契约
 
 **并发语义（冻结点）**：
-> `AsyncTaskQueue` 为**单 worker 线程**。所有测试（无论 sync/async）均入队由该 worker **串行执行**。sync 测试 enqueue 后阻塞等待结果；async 测试 enqueue 后立即返回。此设计确保：① 回调线程不被长测试阻塞，MQTT 消息持续接收；② 所有硬件访问（I2C、V4L2、GPIO、Motor SPI）由架构保证串行，无需外部协议假设。
+> `AsyncTaskQueue` 为**单 worker 线程**。所有测试（无论 sync/async）均入队由该 worker **串行执行**。sync 测试 `enqueueAndWait` 阻塞等待结果；async 测试 `enqueue` 后立即返回。此设计确保：① 回调线程不被长测试阻塞，MQTT 消息持续接收；② 所有硬件访问（I2C、V4L2、GPIO、Motor SPI）由架构保证串行，无需外部协议假设。
 
 **异常契约（冻结点）**：
-> `dispatch` 对 `testCfg` 的访问和 `mod->run()` 的执行均受异常守卫保护。任何异常（配置缺失、硬件访问失败、模块内部抛错）都被捕获为 `TestResult::fail`，worker 线程永不崩溃。
+> `dispatch` 对 `testCfg` 的访问和 `mod->run()` 的执行均受异常守卫保护。任何异常（包括非 `std::exception` 派生类型）都被捕获为 `TestResult::fail`，worker 线程永不崩溃。
 
 ```cpp
 void TestEngine::dispatch(const std::string& topic,
@@ -666,6 +661,8 @@ void TestEngine::dispatch(const std::string& topic,
             return mod->run(ctx);
         } catch (const std::exception& e) {
             return TestResult::fail(std::string("exception: ") + e.what());
+        } catch (...) {
+            return TestResult::fail("unknown exception");
         }
     };
 
@@ -681,7 +678,7 @@ void TestEngine::dispatch(const std::string& topic,
 
 **线程安全**：`TestEngine` 内部持 `std::mutex mqttMutex_`。`publishResult` 内加锁后调用 `mosquitto_publish`，串行化 sync 分支（MQTT 回调线程）与 async 分支（worker 线程）的 publish 调用。
 
-### 5.4 tests.json 驱动调度（平台层自维护）
+### 5.5 tests.json 驱动调度（平台层自维护）
 
 ```json
 // platforms/falcon/tests.json
@@ -708,7 +705,30 @@ void TestEngine::dispatch(const std::string& topic,
 | 停用测试 | `enabled` 置 `false` | 零 |
 | 调顺序 | 改 `order` | 零 |
 
-### 5.5 tests 库类型
+### 5.6 启动期校验（fail-fast）
+
+`TestEngine::loadTestConfig` 在启动期校验 `tests.json`：
+- 每条必须有 `topic` + `module`
+- `module` 必须在 `ModuleRegistry` 中存在（即已被某个 `.cpp` 自注册）
+- 校验失败立即打印明确错误并退出，不在产线上等 topic 触发才暴露
+
+```cpp
+bool TestEngine::loadTestConfig(const std::string& path) {
+    // 加载 JSON...
+    for (auto& t : j["tests"]) {
+        auto moduleName = t.at("module").get<std::string>();
+        if (!ModuleRegistry::instance().has(moduleName)) {
+            fprintf(stderr, "[TestEngine] tests.json 引用未注册模块: %s\n",
+                    moduleName.c_str());
+            return false;
+        }
+    }
+    testConfigs_ = std::move(j);
+    return true;
+}
+```
+
+### 5.7 tests 库类型
 
 `src/tests/` 编译为 **OBJECT library**（`add_library(factory_tests OBJECT ...)`），消费方将其对象文件全量链接，避免静态库 dead-strip 导致自注册符号被丢弃。
 
@@ -765,29 +785,28 @@ PLATFORM=falcon ./build.sh
 ```
 在与 `FACTORY_GIT` 完全脱钩的目录里能编过才算数。
 
-**轻量版 grep 钩子**（pre-commit）：
-```bash
-# 检查 factory_fw 内是否有逃出根的 ../
-if grep -r '\.\./' factory_fw/ --include="*.cmake" --include="CMakeLists.txt" --include="*.sh"; then
-    echo "Error: factory_fw 内发现逃出根的 '../' 引用，违反独立性不变式"
-    exit 1
-fi
-```
-
 ---
 
 ## 9. Phase 1 实现待办清单
 
-| 编号 | 内容 | 阶段 | 优先级 |
-|---|---|---|---|
-| A | 显式列源文件（不用 `file(GLOB)`） | 骨架搭建 | 高 |
-| B | `set(FW_ROOT ...)` 改 `if(NOT DEFINED FW_ROOT)` | 骨架搭建 | 高 |
-| C | `build.sh` 加 toolchain 存在性检查 + `SCRIPT_DIR` 锚定 | 骨架搭建 | 高 |
-| D | `IWifiManager.h` 从 `ble/` 移到 `include/platforms/common/interface/` | 骨架搭建 | 高 |
-| E | 确认 `factory_common`/`factory_config` 链接传递性（PUBLIC/INTERFACE） | 骨架搭建 | 中 |
-| F | `testCfg["module"]` 改 `.at("module").get<std::string>()` | 测试框架 | 中 |
-| G | 确认 mosquitto 构建/循环模式的线程安全 | 测试框架 | 中 |
-| H | `TestResult` 统一走工厂方法，不留裸聚合初始化 | 测试框架 | 低 |
-| I | 工具链文件从 `FALCON_SDK` 环境变量定位 | 依赖管理 | 高 |
-| J | 第三方依赖获取方式明确 | 依赖管理 | 高 |
-| K | CI 隔离构建测试 + grep 独立性守卫钩子 | 独立性守卫 | 中 |
+### 9.1 已落入文档（编码验证即可）
+
+| 编号 | 内容 | 状态 |
+|---|---|---|
+| D | `IWifiManager.h` 在 `include/platforms/common/interface/` | ✅ 文档已落实 |
+| F | `testCfg["module"]` 改 `.at("module").get<std::string>()` | ✅ 5.4 已落实 |
+| G | mosquitto 线程安全确认 | ⏳ 编码期验证 |
+| H | `TestResult` 统一走工厂方法 | ✅ 5.1 已落实 |
+
+### 9.2 待编码实现
+
+| 编号 | 内容 | 优先级 |
+|---|---|---|
+| A | 显式列源文件（不用 `file(GLOB)`） | 高 |
+| B | `set(FW_ROOT ...)` 改 `if(NOT DEFINED FW_ROOT)` | 高 |
+| C | `build.sh` 加 toolchain 存在性检查 + `SCRIPT_DIR` 锚定 | 高 |
+| E | 确认 `factory_common`/`factory_config` 链接传递性（PUBLIC/INTERFACE） | 中 |
+| I | 工具链文件从 `FALCON_SDK` 环境变量定位 | 高 |
+| J | 第三方依赖获取方式明确 | 高 |
+| K | CI 隔离构建测试 | 中 |
+| L | 启动期 `tests.json` 校验（`loadTestConfig` 中校验 module 存在性） | 高 |
