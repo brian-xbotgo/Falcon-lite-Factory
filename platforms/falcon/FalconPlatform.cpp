@@ -7,8 +7,8 @@
 #include "drivers/Tmi8152MotorDriver.h"
 #include "drivers/HallSwitchDriver.h"
 #include "drivers/LvglDisplayDriver.h"
-#include "drivers/Rv1126bRecorder.h"
-#include "drivers/Rv1126bWifiManager.h"
+#include "drivers/Rk3576Recorder.h"
+#include "drivers/Rk3576WifiManager.h"
 
 namespace ft {
 
@@ -38,8 +38,8 @@ void FalconPlatform::registerDrivers(DriverRegistry& reg) {
     reg.bind<IHallDriver>   ([] { return std::make_unique<HallSwitchDriver>(); });
     reg.bind<IDisplayDriver>([] { return std::make_unique<LvglDisplayDriver>(); });
     reg.bind<IGpioDriver>   ([] { return std::make_unique<SysfsGpioDriver>(); });
-    reg.bind<IRecorder>     ([] { return std::make_unique<Rv1126bRecorder>(); });
-    reg.bind<IWifiManager>  ([] { return std::make_unique<Rv1126bWifiManager>(); });
+    reg.bind<IRecorder>     ([] { return std::make_unique<Rk3576Recorder>(); });
+    reg.bind<IWifiManager>  ([] { return std::make_unique<Rk3576WifiManager>(); });
 }
 
 std::unique_ptr<IPlatform> createFalconPlatform() {
