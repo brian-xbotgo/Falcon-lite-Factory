@@ -1,17 +1,19 @@
 #pragma once
-#include "DriverRegistry.h"
-#include "AsyncTaskQueue.h"
+#include "core/DriverRegistry.h"
+#include "core/AsyncTaskQueue.h"
 #include <nlohmann/json.hpp>
 #include <string>
 #include <mutex>
+#include <atomic>
 
 namespace ft {
 
+struct TestResult;
 class PlatformConfig;
 
 class TestEngine {
 public:
-    TestEngine(DriverRegistry& drivers, PlatformConfig& cfg);
+    TestEngine(const DriverRegistry& drivers, const PlatformConfig& cfg);
     ~TestEngine();
 
     bool loadTestConfig(const std::string& path);
@@ -22,14 +24,14 @@ public:
 
 private:
     void dispatch(const std::string& topic, const nlohmann::json& testCfg);
-    void publishResult(const std::string& topic, const struct TestResult& result);
+    void publishResult(const std::string& topic, const TestResult& result);
 
-    DriverRegistry& drivers_;
-    PlatformConfig& config_;
+    const DriverRegistry& drivers_;
+    const PlatformConfig& config_;
     AsyncTaskQueue asyncQueue_;
     nlohmann::json testConfigs_;
     std::mutex mqttMutex_;
-    bool running_ = true;
+    std::atomic<bool> running_{true};
 };
 
 } // namespace ft

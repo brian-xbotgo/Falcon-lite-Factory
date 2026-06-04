@@ -5,10 +5,12 @@
 #include "config/PlatformConfig.h"
 #include <cstdio>
 #include <fstream>
+#include <thread>
+#include <chrono>
 
 namespace ft {
 
-TestEngine::TestEngine(DriverRegistry& drivers, PlatformConfig& cfg)
+TestEngine::TestEngine(const DriverRegistry& drivers, const PlatformConfig& cfg)
     : drivers_(drivers), config_(cfg) {}
 
 TestEngine::~TestEngine() { stop(); }
@@ -22,8 +24,17 @@ bool TestEngine::loadTestConfig(const std::string& path) {
     try {
         nlohmann::json j;
         f >> j;
-        for (auto& t : j["tests"]) {
+        if (!j.contains("tests") || !j.at("tests").is_array()) {
+            fprintf(stderr, "[TestEngine] tests.json missing or invalid 'tests' array\n");
+            return false;
+        }
+        for (auto& t : j.at("tests")) {
             auto name = t.at("module").get<std::string>();
+            if (!t.contains("topic")) {
+                fprintf(stderr, "[TestEngine] tests.json entry missing 'topic' for module: %s\n",
+                        name.c_str());
+                return false;
+            }
             if (!ModuleRegistry::instance().has(name)) {
                 fprintf(stderr, "[TestEngine] tests.json references unknown module: %s\n",
                         name.c_str());

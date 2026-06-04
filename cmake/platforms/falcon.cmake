@@ -1,10 +1,10 @@
 if(NOT DEFINED ENV{FALCON_SDK})
-    message(FATAL_ERROR "请设置 FALCON_SDK 指向 RV1126B SDK 根目录")
+    message(FATAL_ERROR "请设置 FALCON_SDK 指向 Falcon SDK 根目录 (e.g. /path/to/Omni3576-sdk/buildroot/output/rockchip_rk3576_ipc/host)")
 endif()
 
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
-set(CMAKE_SYSROOT "$ENV{FALCON_SDK}/sysroot")
+set(CMAKE_SYSROOT "$ENV{FALCON_SDK}/aarch64-buildroot-linux-gnu/sysroot")
 set(CMAKE_C_COMPILER "$ENV{FALCON_SDK}/bin/aarch64-buildroot-linux-gnu-gcc")
 set(CMAKE_CXX_COMPILER "$ENV{FALCON_SDK}/bin/aarch64-buildroot-linux-gnu-g++")
 set(CMAKE_FIND_ROOT_PATH "${CMAKE_SYSROOT}")
