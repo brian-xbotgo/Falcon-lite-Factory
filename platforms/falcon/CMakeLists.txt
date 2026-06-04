@@ -15,6 +15,7 @@ if(NOT TARGET factory_core)
 endif()
 
 set(FALCON_DRIVER_SRCS
+    FalconPlatform.cpp
     drivers/RkMppEncoder.cpp
     drivers/Gc4663CameraDriver.cpp
     drivers/Cw221xBatteryDriver.cpp
@@ -25,6 +26,11 @@ set(FALCON_DRIVER_SRCS
     drivers/Rv1126bWifiManager.cpp
 )
 add_library(platform_falcon STATIC ${FALCON_DRIVER_SRCS})
+target_include_directories(platform_falcon PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${FW_ROOT}/include
+    ${FW_ROOT}/third_party
+)
 
 add_executable(factory_test ${FW_ROOT}/src/main.cpp)
 target_link_libraries(factory_test

@@ -1,5 +1,4 @@
 set(PLATFORM_COMMON_SRCS
-    NullPlatform.cpp
     NullEncoder.cpp
     NullCameraDriver.cpp
     NullBatteryDriver.cpp

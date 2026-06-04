@@ -5,7 +5,8 @@ namespace ft {
 class KeyTest : public ITestModule {
 public:
     TestResult run(TestContext&) override {
-        return TestResult::skipped("not implemented");
+        // TODO: implement key detection via GPIO or input event
+        return TestResult::skipped("key test not yet implemented");
     }
 };
 

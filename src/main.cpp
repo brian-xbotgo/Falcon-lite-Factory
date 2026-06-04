@@ -4,13 +4,22 @@
 #include "platforms/common/interface/IPlatform.h"
 #include "platforms/common/interface/IDisplayDriver.h"
 #include <cstdio>
+#include <cstdlib>
+#include <thread>
+#include <chrono>
 
 using namespace ft;
 
 int main() {
+    const char* platformJson = std::getenv("FACTORY_PLATFORM_JSON");
+    if (!platformJson) platformJson = "/oem/usr/conf/platform.json";
+
+    const char* testsJson = std::getenv("FACTORY_TESTS_JSON");
+    if (!testsJson) testsJson = "/oem/usr/conf/tests.json";
+
     auto& cfg = PlatformConfig::instance();
-    if (!cfg.loadFromFile("/oem/usr/conf/platform.json")) {
-        fprintf(stderr, "[main] failed to load platform.json\n");
+    if (!cfg.loadFromFile(platformJson)) {
+        fprintf(stderr, "[main] failed to load %s\n", platformJson);
         return -1;
     }
 
@@ -27,9 +36,24 @@ int main() {
     if (display) display->init();
 
     ft::TestEngine engine(reg, cfg);
-    if (!engine.loadTestConfig("/oem/usr/conf/tests.json")) {
-        fprintf(stderr, "[main] failed to load tests.json\n");
+    if (!engine.loadTestConfig(testsJson)) {
+        fprintf(stderr, "[main] failed to load %s\n", testsJson);
         return -1;
+    }
+
+    if (std::getenv("FACTORY_SELF_TEST")) {
+        fprintf(stdout, "[SelfTest] triggering battery (sync)...\n");
+        engine.onMqttMessage("15R", "");
+        fprintf(stdout, "[SelfTest] triggering camera (async)...\n");
+        engine.onMqttMessage("18R", "");
+        // Give async worker time to finish
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        fprintf(stdout, "[SelfTest] triggering sys (async)...\n");
+        engine.onMqttMessage("26R", "");
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        engine.stop();
+        fprintf(stdout, "[SelfTest] done\n");
+        return 0;
     }
 
     engine.run();

@@ -5,7 +5,8 @@ namespace ft {
 class AgingTest : public ITestModule {
 public:
     TestResult run(TestContext&) override {
-        return TestResult::skipped("not implemented");
+        // TODO: implement aging stress test (GPU/NPU/thermal cycling)
+        return TestResult::skipped("aging test not yet implemented");
     }
 };
 

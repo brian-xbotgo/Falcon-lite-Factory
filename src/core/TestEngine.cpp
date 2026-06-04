@@ -2,6 +2,7 @@
 #include "core/ModuleRegistry.h"
 #include "core/TestResult.h"
 #include "core/TestContext.h"
+#include "tests/ITestModule.h"
 #include "config/PlatformConfig.h"
 #include <cstdio>
 #include <fstream>
@@ -58,15 +59,88 @@ void TestEngine::run() {
 void TestEngine::stop() { running_ = false; }
 
 void TestEngine::onMqttMessage(const std::string& topic, const std::string& payload) {
-    // TODO: lookup testCfg by topic, call dispatch
+    try {
+        nlohmann::json j = nlohmann::json::parse(payload);
+        // If payload is a full test config, use it directly
+        if (j.contains("module")) {
+            dispatch(topic, j);
+            return;
+        }
+    } catch (...) {
+        // Not a JSON payload, ignore
+    }
+
+    // Lookup testCfg by topic from tests.json
+    try {
+        for (auto& t : testConfigs_.at("tests")) {
+            if (t.at("topic").get<std::string>() == topic) {
+                if (!t.value("enabled", true)) {
+                    publishResult(topic, TestResult::skipped("test disabled"));
+                    return;
+                }
+                dispatch(topic, t);
+                return;
+            }
+        }
+        publishResult(topic, TestResult::fail("topic not found in tests.json"));
+    } catch (const std::exception& e) {
+        publishResult(topic, TestResult::fail(std::string("lookup error: ") + e.what()));
+    }
 }
 
 void TestEngine::dispatch(const std::string& topic, const nlohmann::json& testCfg) {
-    // TODO: as defined in spec v1.3-final
+    std::unique_ptr<ITestModule> mod;
+    try {
+        mod = ModuleRegistry::instance().create(
+            testCfg.at("module").get<std::string>());
+    } catch (const std::exception& e) {
+        publishResult(topic,
+            TestResult::fail(std::string("bad config: ") + e.what()));
+        return;
+    }
+
+    if (!mod) {
+        publishResult(topic, TestResult::fail("unknown module"));
+        return;
+    }
+
+    TestContext ctx(drivers_, config_,
+                    testCfg.value("params", nlohmann::json::object()));
+
+    // shared_ptr makes the lambda copy-constructible (required by std::function)
+    auto modShared = std::shared_ptr<ITestModule>(std::move(mod));
+    auto task = [modShared, ctx = std::move(ctx),
+                 topic, this]() mutable -> TestResult {
+        try {
+            return modShared->run(ctx);
+        } catch (const std::exception& e) {
+            return TestResult::fail(std::string("exception: ") + e.what());
+        } catch (...) {
+            return TestResult::fail("unknown exception");
+        }
+    };
+
+    if (testCfg.value("async", false)) {
+        asyncQueue_.enqueue([task = std::move(task), topic, this]() mutable {
+            publishResult(topic, task());
+        });
+    } else {
+        publishResult(topic, asyncQueue_.enqueueAndWait(std::move(task)));
+    }
 }
 
 void TestEngine::publishResult(const std::string& topic, const TestResult& result) {
-    // TODO: mosquitto_publish with mutex
+    std::lock_guard<std::mutex> lock(mqttMutex_);
+    const char* statusStr = "UNKNOWN";
+    switch (result.status) {
+        case TestResult::Status::Pass:    statusStr = "PASS"; break;
+        case TestResult::Status::Fail:    statusStr = "FAIL"; break;
+        case TestResult::Status::Skipped: statusStr = "SKIP"; break;
+    }
+    fprintf(stdout, "[Result] topic=%s status=%s detail=%s\n",
+            topic.c_str(), statusStr, result.detail.c_str());
+    fflush(stdout);
+    // TODO: mosquitto_publish with result JSON
 }
 
 } // namespace ft
