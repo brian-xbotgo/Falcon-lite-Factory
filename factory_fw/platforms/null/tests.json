@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "tests": [
+    { "topic": "15R", "module": "battery", "enabled": true,  "order": 1, "async": false },
+    { "topic": "18R", "module": "camera",  "enabled": true,  "order": 2, "async": true, "params": { "cam_index": 0 } },
+    { "topic": "21R", "module": "hall",    "enabled": true,  "order": 3, "async": true  },
+    { "topic": "26R", "module": "sys",     "enabled": true,  "order": 4, "async": true  }
+  ]
+}

@@ -7,8 +7,8 @@ namespace ft {
 
 class DriverRegistry {
 public:
-    template<class Interface>
-    void bind(std::function<std::unique_ptr<Interface>()> factory) {
+    template<class Interface, class Factory>
+    void bind(Factory factory) {
         store_.put(typeid(Interface), [f = std::move(factory)]() -> void* {
             return f().release();
         });

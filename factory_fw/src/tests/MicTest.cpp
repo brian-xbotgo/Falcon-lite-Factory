@@ -5,7 +5,8 @@ namespace ft {
 class MicTest : public ITestModule {
 public:
     TestResult run(TestContext&) override {
-        return TestResult::skipped("not implemented");
+        // TODO: implement mic sensitivity + THD test
+        return TestResult::skipped("mic test not yet implemented");
     }
 };
 
