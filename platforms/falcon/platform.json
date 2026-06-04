@@ -1,0 +1,117 @@
+{
+  "platform": "falcon",
+  "version": 1,
+  "gpio": {
+    "led": {
+      "white": 170,
+      "red": 169,
+      "status_a": 144,
+      "status_b": 89
+    },
+    "buzzer": 93,
+    "backlight": 92,
+    "lock_detect": 98,
+    "hall": {
+      "upper_limit": 181,
+      "lower_limit": 182
+    }
+  },
+  "i2c": {
+    "cam0": { "bus": 3, "addr": "0x29", "otp": "/proc/otp_eeprom-3-50" },
+    "cam1": { "bus": 4, "addr": "0x29", "otp": "/proc/otp_eeprom-4-50" },
+    "charger": { "bus": 2, "addr": "0x6a", "probe_reg": "0x14", "probe_mask": "0x38", "probe_expect": 4 },
+    "fuel_gauge": { "bus": 5, "addr": "0x64", "probe_reg": "0x00", "probe_expect": "0xa0" }
+  },
+  "battery": {
+    "driver": "cw221x",
+    "sysfs_path": "/sys/class/power_supply/cw221X-bat/uevent",
+    "model_path": "/sys/class/power_supply/cw221X-bat/model_name",
+    "dev_node": "/dev/cw221X-bat"
+  },
+  "motor": {
+    "driver": "tmi8152",
+    "device_path": "/dev/tmi8152",
+    "spi_bus": 0,
+    "directions": {
+      "horizontal": { "channel": "CH12" },
+      "vertical":   { "channel": "CH34" }
+    }
+  },
+  "display": {
+    "driver": "lvgl_fb",
+    "width": 428,
+    "height": 156,
+    "font_path": "D:Rajdhani/Rajdhani-SemiBold-5.ttf",
+    "font_label_size": 48,
+    "font_timer_size": 52
+  },
+  "audio": {
+    "mic_card": 1,
+    "mic_device": "hw:1,0",
+    "sample_rate": 48000,
+    "format": "S32_LE",
+    "channels": 2,
+    "pdm_gain_control": "PDM0 Gain Volume 0"
+  },
+  "video": {
+    "encoder": "rockchip_mpp",
+    "recorder_config": "/oem/usr/conf/recorder.json"
+  },
+  "storage": {
+    "tf_partition": "/dev/mmcblk1p1",
+    "tf_mount_point": "/mnt/sdcard",
+    "prod_dir": "/userdata/prod"
+  },
+  "paths": {
+    "sn_file": "/device_data/pcba.txt",
+    "info_ini": "/device_data/info.ini",
+    "factory_flag": "/userdata/factory_mode",
+    "aging_time_conf": "/userdata/aging_time.conf",
+    "aging_result": "/userdata/aging_result.json",
+    "hall_threshold_ini": "/userdata/hall_threshold.ini",
+    "key_valid_flag": "/userdata/key_valid",
+    "version_file": "/oem/usr/conf/version.txt",
+    "power_off_script": "/oem/usr/scripts/power_off.sh"
+  },
+  "input": {
+    "key_devices": [
+      { "path": "/dev/input/event0", "name": "adc-m-keys", "keys": ["F15","F16","F17"] },
+      { "path": "/dev/input/event1", "name": "adc-ab-keys", "keys": ["F13","F14"] },
+      { "path": "/dev/input/event2", "name": "gpio-keys", "keys": ["power"] }
+    ],
+    "key_codes": ["0x290", "KEY_F13", "KEY_F14", "KEY_F15", "KEY_F16", "KEY_F17"]
+  },
+  "soc_test": {
+    "gpu": {
+      "devfreq_path": "/sys/class/devfreq/27800000.gpu",
+      "load_path": "/sys/class/devfreq/27800000.gpu/load",
+      "load_keyword": "100@"
+    },
+    "ddr": {
+      "devfreq_path": "/sys/class/devfreq/dmc",
+      "target_freq_hz": 2112000000
+    },
+    "cpu": {
+      "governor_path": "/sys/devices/system/cpu/cpu5/cpufreq/scaling_governor"
+    },
+    "npu": {
+      "load_path": "/sys/kernel/debug/rknpu/load",
+      "load_keyword": "Core0: 99%, Core1: 99%"
+    },
+    "stress_tools_dir": "/oem/usr/bin"
+  },
+  "wifi": {
+    "sta_interface": "wlan0",
+    "ap_interface": "wlan1",
+    "hostapd_conf": "/tmp/wps_hostapd.conf",
+    "ap_ip": "192.168.5.1",
+    "usb_rndis": {
+      "interface": "usb0",
+      "ip": "172.16.110.6"
+    }
+  },
+  "ble": {
+    "name_prefix": "Xbt-F-",
+    "manufacturer_id": 65535
+  }
+}

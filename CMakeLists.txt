@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 3.16)
+project(FactoryFirmware LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+
+add_subdirectory(src/core)
+add_subdirectory(src/common)
+add_subdirectory(src/config)
+add_subdirectory(src/hal)
+add_subdirectory(src/tests)
+add_subdirectory(src/platforms/common)
+
+set(TARGET_PLATFORM "falcon" CACHE STRING "Target platform")
+add_subdirectory("platforms/${TARGET_PLATFORM}")

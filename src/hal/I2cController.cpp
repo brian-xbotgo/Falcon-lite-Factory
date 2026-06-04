@@ -1,0 +1,26 @@
+#include "hal/I2cController.h"
+#include "common/ShellUtils.h"
+#include <cstdio>
+#include <string>
+
+namespace ft {
+
+bool I2cController::writeByte(int bus, int addr, uint8_t reg, uint8_t value) {
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "i2cset -f -y %d 0x%02x 0x%02x 0x%02x", bus, addr, reg, value);
+    return system(cmd) == 0;
+}
+
+bool I2cController::readByte(int bus, int addr, uint8_t reg, uint8_t& value) {
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "i2cget -f -y %d 0x%02x 0x%02x", bus, addr, reg);
+    auto result = shell_exec(cmd);
+    if (result.empty()) return false;
+    value = static_cast<uint8_t>(std::stoi(result, nullptr, 0));
+    return true;
+}
+
+bool I2cController::probe(int bus, int addr) {
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "i2cdetect -y %d | grep "
+  }         ]    ,
