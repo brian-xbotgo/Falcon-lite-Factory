@@ -1,4 +1,5 @@
 #include "core/ModuleRegistry.h"
+#include "tests/ITestModule.h"
 
 namespace ft {
 
@@ -9,7 +10,9 @@ ModuleRegistry& ModuleRegistry::instance() {
 
 void ModuleRegistry::add(const std::string& name,
     std::function<std::unique_ptr<ITestModule>()> factory) {
-    store_.put(name, std::move(factory));
+    store_.put(name, [f = std::move(factory)]() -> void* {
+        return f().release();
+    });
 }
 
 std::unique_ptr<ITestModule> ModuleRegistry::create(const std::string& name) const {

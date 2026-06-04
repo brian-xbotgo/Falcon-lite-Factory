@@ -22,5 +22,8 @@ bool I2cController::readByte(int bus, int addr, uint8_t reg, uint8_t& value) {
 
 bool I2cController::probe(int bus, int addr) {
     char cmd[128];
-    snprintf(cmd, sizeof(cmd), "i2cdetect -y %d | grep "
-  }         ]    ,
+    snprintf(cmd, sizeof(cmd), "i2cdetect -y %d | grep \" %02x \"", bus, addr);
+    return !shell_exec(cmd).empty();
+}
+
+} // namespace ft

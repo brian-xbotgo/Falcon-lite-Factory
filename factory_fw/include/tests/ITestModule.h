@@ -1,6 +1,7 @@
 #pragma once
 #include "core/TestResult.h"
 #include "core/TestContext.h"
+#include "core/ModuleRegistry.h"
 
 namespace ft {
 
