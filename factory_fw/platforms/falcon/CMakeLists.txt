@@ -22,11 +22,11 @@ set(FALCON_DRIVER_SRCS
     drivers/Tmi8152MotorDriver.cpp
     drivers/HallSwitchDriver.cpp
     drivers/LvglDisplayDriver.cpp
-    drivers/Rv1126bRecorder.cpp
-    drivers/Rv1126bWifiManager.cpp
+    drivers/Rk3576Recorder.cpp
+    drivers/Rk3576WifiManager.cpp
 )
 add_library(platform_falcon STATIC ${FALCON_DRIVER_SRCS})
-target_include_directories(platform_falcon PUBLIC
+target_include_directories(platform_falcon PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${FW_ROOT}/include
     ${FW_ROOT}/third_party
@@ -39,6 +39,8 @@ target_link_libraries(factory_test
     factory_config
     factory_hal
     factory_tests
-    factory_platform_common
+    -Wl,--whole-archive
     platform_falcon
+    -Wl,--no-whole-archive
+    factory_platform_common
 )

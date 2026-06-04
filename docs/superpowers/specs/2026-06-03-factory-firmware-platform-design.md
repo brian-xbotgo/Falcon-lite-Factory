@@ -375,8 +375,8 @@ namespace ft {
 
 class DriverRegistry {
 public:
-    template<class Interface>
-    void bind(std::function<std::unique_ptr<Interface>()> factory) {
+    template<class Interface, class Factory>
+    void bind(Factory factory) {
         store_.put(typeid(Interface), [f = std::move(factory)]() -> void* {
             return f().release();
         });
@@ -656,10 +656,12 @@ void TestEngine::dispatch(const std::string& topic,
     TestContext ctx(drivers_, config_,
                     testCfg.value("params", nlohmann::json::object()));
 
-    auto task = [mod = std::move(mod), ctx = std::move(ctx),
+    // shared_ptr makes the lambda copy-constructible (required by std::function)
+    auto modShared = std::shared_ptr<ITestModule>(std::move(mod));
+    auto task = [modShared, ctx = std::move(ctx),
                  topic, this]() mutable -> TestResult {
         try {
-            return mod->run(ctx);
+            return modShared->run(ctx);
         } catch (const std::exception& e) {
             return TestResult::fail(std::string("exception: ") + e.what());
         } catch (...) {

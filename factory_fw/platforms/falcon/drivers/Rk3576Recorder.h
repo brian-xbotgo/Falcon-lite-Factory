@@ -3,7 +3,7 @@
 
 namespace ft {
 
-class Rv1126bRecorder : public IRecorder {
+class Rk3576Recorder : public IRecorder {
 public:
     bool start(const RecorderCmd&) override { recording_ = true; return true; }
     bool stop() override { recording_ = false; return true; }

@@ -38,8 +38,8 @@ platforms/
 │       ├── Tmi8152MotorDriver.cpp
 │       ├── HallSwitchDriver.cpp
 │       ├── LvglDisplayDriver.cpp
-│       ├── Rv1126bRecorder.cpp
-│       └── Rv1126bWifiManager.cpp
+│       ├── Rk3576Recorder.cpp
+│       └── Rk3576WifiManager.cpp
 └── null/                   # Null 平台（x86 CI 测试）
     └── (无 driver，全部用 Null* 实现)
 ```
@@ -56,8 +56,8 @@ platforms/
 | `IHallDriver` | 霍尔传感器读取 | `HallSwitchDriver` |
 | `IDisplayDriver` | 显示渲染 | `LvglDisplayDriver` |
 | `IGpioDriver` | GPIO 操作 | `SysfsGpioDriver`（通用） |
-| `IRecorder` | 录像启停 | `Rv1126bRecorder` |
-| `IWifiManager` | WiFi 扫描/连接 | `Rv1126bWifiManager` |
+| `IRecorder` | 录像启停 | `Rk3576Recorder` |
+| `IWifiManager` | WiFi 扫描/连接 | `Rk3576WifiManager` |
 
 ## IPlatform 接口
 

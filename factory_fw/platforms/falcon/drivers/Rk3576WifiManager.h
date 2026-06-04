@@ -4,7 +4,7 @@
 
 namespace ft {
 
-class Rv1126bWifiManager : public IWifiManager {
+class Rk3576WifiManager : public IWifiManager {
 public:
     std::string getStaIp(const char*) override { return "192.168.1.100"; }
     int getStaCount(const char*) override { return 1; }

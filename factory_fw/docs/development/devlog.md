@@ -174,7 +174,7 @@ fatal error: nlohmann/json.hpp: No such file or directory
 | `src/core/TestEngine.cpp:publishResult()` | `mosquitto_publish` + 锁 | 结果无法上报 |
 | 12 个 `src/tests/*Test.cpp` | 全部 `skipped("not implemented")` | 无实际测试功能 |
 | `src/ble/*.cpp` | 空桩 | BLE 未实现 |
-| `platforms/falcon/drivers/*.cpp` | 空桩 | RV1126B 驱动未实现 |
+| `platforms/falcon/drivers/*.cpp` | 空桩 | RK3576 驱动未实现 |
 | `platforms/falcon/build_factory.sh` | 仅 `echo` | 不生成固件镜像 |
 
 ---
@@ -288,7 +288,27 @@ static bool _reg_null = registerPlatformFactory("null", createNullPlatform);
 
 **验证**：null 平台运行时 `createPlatform("null")` 成功返回非空指针。
 
-**注意**：falcon 平台未遇到此问题，因为 `FalconPlatform::registerDrivers()` 是类外定义的非内联虚函数，vtable 在 `FalconPlatform.o` 中，vtable 被 `main.cpp` 中的虚函数调用引用，因此链接器必须保留整个 `FalconPlatform.o`。
+**评审发现 falcon 同样中枪**：`nm build/falcon/factory_test | grep _reg_falcon` 零输出——`_reg_falcon` 同样被 archive member selection 丢弃。之前认为"vtable 引用保留整个 .o"的推理是循环的：vtable 只有在 `.o` 被链进来后才存在，而 `.o` 被链进来的前提是 `_reg_falcon` 先把条目填进注册表……
+
+**统一修复方案**：平台 library 链接时加 `--whole-archive`，与测试模块走 OBJECT library 的套路保持一致（同一原理，不同实现）：
+```cmake
+target_link_libraries(factory_test
+    factory_core
+    factory_common
+    ...
+    -Wl,--whole-archive
+    platform_falcon
+    -Wl,--no-whole-archive
+    factory_platform_common
+)
+```
+**注意**：`factory_platform_common` 必须放在 `--whole-archive` 之后，否则 `FalconPlatform.o` 中引用 `SysfsGpioDriver` vtable 时，链接器已处理完 `factory_platform_common`。
+
+**验证**：
+```bash
+nm build/falcon/factory_test | grep _reg_falcon
+# 00000000000c6098 b _ZN2ftL11_reg_falconE  ← 符号存在
+```
 
 #### 2.3.4 陷阱 D：平台 driver include 路径缺失
 
@@ -447,12 +467,22 @@ file build/falcon/factory_test
 | # | 内容 | 优先级 | 说明 |
 |---|------|--------|------|
 | G | mosquitto 线程安全 | 中 | 需引入 mosquitto 库后才能验证 |
-| J | 第三方依赖获取方式 | **高** | nlohmann/json 目前是构建期 curl 下载，违反独立性不变式。方案：vendored 单头文件提交进 git |
-| K | 隔离构建 | **高** | `cp -r factory_fw /tmp/iso && cd /tmp/iso && PLATFORM=null ./build.sh` 需跑通 |
+| J | 第三方依赖获取方式 | ✅ | `third_party/nlohmann/json.hpp` 已 vendored 提交（3.11.3 单头文件），隔离构建验证通过 |
+| K | 隔离构建 | ✅ | `cp -r factory_fw /tmp/fw_iso && cd /tmp/fw_iso && PLATFORM=null ./build.sh` 编译通过 |
 | M | MQTT 集成 | 高 | `onMqttMessage` 目前从 tests.json 查找 topic，需接入 mosquitto loop |
 | N | BLE 模块迁移 | 中 | `src/ble/*.cpp` 仍为 stub |
 | O | 平台 driver 真实实现 | 中 | 8 个 driver stub 需从旧代码迁移真实硬件逻辑 |
 | P | build_factory.sh 打包 | 低 | 目前仅 echo，需生成固件镜像 |
+
+#### 2.7.3 上轮 IWYU 遗留（本轮确认已解决）
+
+以下 3 条来自上轮评审，本轮验证时确认已落在代码中，但之前 devlog 未记录：
+
+| # | 问题 | 落点 | 状态 |
+|---|------|------|------|
+| 1 | `running_` 应改 `std::atomic<bool>` | `include/core/TestEngine.h:34` | ✅ `std::atomic<bool> running_{true};` |
+| 2 | `TestEngine.cpp` 应显式 `#include <thread>/<chrono>` | `src/core/TestEngine.cpp:9-10` | ✅ 已包含 |
+| 3 | `TestEngine.h` include 路径一致性 | `include/core/TestEngine.h` | ✅ 统一从 `include/` 根目录引用 `core/DriverRegistry.h` |
 
 ### 2.8 评审检查项
 
