@@ -83,7 +83,6 @@ cp -f "$SCRIPT_DIR/sdk_patch/kernel_patch/motor_tmi8152/motor_tmi8152.ko" "$targ
 
 # --- Scripts ---
 cp -f "$PROJECT_ROOT/lunch/get_cpuinfo.sh" "$target_dir/scripts/"
-cp -f "$PROJECT_ROOT/lunch/insmod_spi_motor.sh" "$target_dir/scripts/"
 cp -f "$PROJECT_ROOT/lunch/power_off.sh" "$target_dir/scripts/"
 cp -f "$PROJECT_ROOT/lunch/start_mqtt.sh" "$target_dir/scripts/"
 cp -f "$SCRIPT_DIR/firmware/iperf3_server_safe.sh" "$target_dir/scripts/"
