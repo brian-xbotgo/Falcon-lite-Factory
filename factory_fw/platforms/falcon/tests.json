@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "tests": [
+    { "topic": "10R", "module": "rtc",        "enabled": true,  "order": 1, "async": false },
+    { "topic": "11R", "module": "mic",        "enabled": true,  "order": 2, "async": true  },
+    { "topic": "12R", "module": "soc",        "enabled": true,  "order": 3, "async": true  },
+    { "topic": "14R", "module": "tfcard",     "enabled": true,  "order": 4, "async": true  },
+    { "topic": "15R", "module": "battery",    "enabled": true,  "order": 5, "async": false },
+    { "topic": "16R", "module": "wifi",       "enabled": true,  "order": 6, "async": false },
+    { "topic": "17R", "module": "key",        "enabled": true,  "order": 7, "async": true  },
+    { "topic": "18R", "module": "camera",     "enabled": true,  "order": 8, "async": true,  "params": { "cam_index": 0 } },
+    { "topic": "20R", "module": "key",        "enabled": true,  "order": 9, "async": true  },
+    { "topic": "21R", "module": "hall",       "enabled": true,  "order": 10, "async": true  },
+    { "topic": "22R", "module": "camera",     "enabled": true,  "order": 11, "async": true,  "params": { "cam_index": 1 } },
+    { "topic": "23R", "module": "mic",        "enabled": true,  "order": 12, "async": true  },
+    { "topic": "24R", "module": "battery",    "enabled": true,  "order": 13, "async": false },
+    { "topic": "26R", "module": "sys",        "enabled": true,  "order": 14, "async": true  },
+    { "topic": "27R", "module": "hall",       "enabled": true,  "order": 15, "async": true  },
+    { "topic": "28R", "module": "camera",     "enabled": true,  "order": 16, "async": true  },
+    { "topic": "30R", "module": "aging",      "enabled": true,  "order": 17, "async": false },
+    { "topic": "31R", "module": "sys",        "enabled": true,  "order": 18, "async": false },
+    { "topic": "32R", "module": "aging",      "enabled": true,  "order": 19, "async": false },
+    { "topic": "34R", "module": "aging",      "enabled": true,  "order": 20, "async": false },
+    { "topic": "36R", "module": "aging",      "enabled": true,  "order": 21, "async": false },
+    { "topic": "37R", "module": "wifi",       "enabled": true,  "order": 22, "async": true  },
+    { "topic": "50R", "module": "sys",        "enabled": true,  "order": 23, "async": false }
+  ]
+}
