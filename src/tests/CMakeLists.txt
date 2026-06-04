@@ -17,7 +17,7 @@ add_library(factory_tests OBJECT ${TEST_SRCS})
 
 target_include_directories(factory_tests PUBLIC
     ${FW_ROOT}/include
-    ${FW_ROOT}/third_party/nlohmann
+    ${FW_ROOT}/third_party
 )
 
 target_compile_features(factory_tests PUBLIC cxx_std_17)

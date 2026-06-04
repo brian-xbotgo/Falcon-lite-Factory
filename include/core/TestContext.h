@@ -1,10 +1,10 @@
 #pragma once
+#include "core/DriverRegistry.h"
 #include <memory>
 #include <nlohmann/json.hpp>
 
 namespace ft {
 
-class DriverRegistry;
 class PlatformConfig;
 
 class TestContext {

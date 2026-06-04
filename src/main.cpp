@@ -5,6 +5,8 @@
 #include "platforms/common/interface/IDisplayDriver.h"
 #include <cstdio>
 
+using namespace ft;
+
 int main() {
     auto& cfg = PlatformConfig::instance();
     if (!cfg.loadFromFile("/oem/usr/conf/platform.json")) {
@@ -12,7 +14,7 @@ int main() {
         return -1;
     }
 
-    auto platform = ft::createPlatform(cfg.platformName());
+    auto platform = ft::createPlatform(cfg.platformName().c_str());
     if (!platform || !platform->init(cfg.raw())) {
         fprintf(stderr, "[main] platform init failed\n");
         return -1;
