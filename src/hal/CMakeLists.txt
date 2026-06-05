@@ -3,12 +3,16 @@ set(HAL_SRCS
     I2cController.cpp
     V4l2Recorder.cpp
     GpioController.cpp
+    AudioCapture.cpp
+    G711Encoder.cpp
+    Mp4Muxer.cpp
 )
 
 add_library(factory_hal STATIC ${HAL_SRCS})
 
 target_include_directories(factory_hal PUBLIC
     ${FW_ROOT}/include
+    ${FW_ROOT}/platforms/falcon/drivers
 )
 
 target_link_libraries(factory_hal PUBLIC factory_platform_common)
