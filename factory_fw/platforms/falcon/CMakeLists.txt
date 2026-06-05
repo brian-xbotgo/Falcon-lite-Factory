@@ -12,6 +12,7 @@ if(NOT TARGET factory_core)
     add_subdirectory(${FW_ROOT}/src/hal           ${CMAKE_BINARY_DIR}/fw_hal)
     add_subdirectory(${FW_ROOT}/src/tests         ${CMAKE_BINARY_DIR}/fw_tests)
     add_subdirectory(${FW_ROOT}/src/platforms/common ${CMAKE_BINARY_DIR}/fw_platform_common)
+    add_subdirectory(${FW_ROOT}/src/ble           ${CMAKE_BINARY_DIR}/fw_ble)
 endif()
 
 set(FALCON_DRIVER_SRCS
@@ -56,6 +57,7 @@ target_link_libraries(factory_test
     factory_config
     factory_hal
     factory_tests
+    factory_ble
     -Wl,--whole-archive
     platform_falcon
     -Wl,--no-whole-archive
