@@ -13,4 +13,7 @@ add_subdirectory(src/tests)
 add_subdirectory(src/platforms/common)
 
 set(TARGET_PLATFORM "falcon" CACHE STRING "Target platform")
+if(TARGET_PLATFORM STREQUAL "falcon")
+    add_compile_definitions(HAVE_MOSQUITTO)
+endif()
 add_subdirectory("platforms/${TARGET_PLATFORM}")

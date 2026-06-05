@@ -33,8 +33,21 @@ target_include_directories(platform_falcon PRIVATE
 )
 
 # 声明式依赖：让 CMake 自动处理链接顺序
-# platform_falcon 引用了 SysfsGpioDriver（定义在 factory_platform_common）
-target_link_libraries(platform_falcon PUBLIC factory_platform_common)
+# platform_falcon 中的 driver 引用了以下库，被引用的库必须排在引用方后面
+target_link_libraries(platform_falcon PUBLIC
+    factory_platform_common   # SysfsGpioDriver
+    factory_hal               # I2cController, etc.
+)
+
+# RK3576 WiFi 库（SDK sysroot 中提供）
+target_link_libraries(platform_falcon PUBLIC rkwifibt)
+
+# Rockchip MPP（SDK sysroot 中提供）
+target_link_libraries(platform_falcon PUBLIC rockchip_mpp)
+
+# mosquitto（工厂固件 vendored 预编译库）
+target_link_directories(platform_falcon PUBLIC ${FW_ROOT}/third_party/mosquitto/lib)
+target_link_libraries(platform_falcon PUBLIC mosquitto)
 
 add_executable(factory_test ${FW_ROOT}/src/main.cpp)
 target_link_libraries(factory_test
