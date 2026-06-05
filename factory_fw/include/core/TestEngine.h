@@ -25,6 +25,7 @@ public:
 private:
     void dispatch(const std::string& topic, const nlohmann::json& testCfg);
     void publishResult(const std::string& topic, const TestResult& result);
+    bool connectMqtt();
 
     const DriverRegistry& drivers_;
     const PlatformConfig& config_;
@@ -32,6 +33,7 @@ private:
     nlohmann::json testConfigs_;
     std::mutex mqttMutex_;
     std::atomic<bool> running_{true};
+    struct mosquitto* mqttClient_ = nullptr;
 };
 
 } // namespace ft

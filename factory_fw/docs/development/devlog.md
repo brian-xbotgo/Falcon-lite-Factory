@@ -501,6 +501,121 @@ file build/falcon/factory_test
 
 ---
 
+## 阶段 3：Driver 迁移 + MQTT 接入 + 构建系统补强
+
+### 3.1 目标
+
+将旧代码（FACTORY_GIT 根目录）的生产级 driver 真实逻辑迁移到 `factory_fw/platforms/falcon/drivers/`，接入 mosquitto 实现 MQTT 收发，修复链接顺序脆性，验证双平台编译与隔离构建。
+
+### 3.2 已完成任务清单
+
+| # | 任务 | 状态 | 关键文件 |
+|---|------|------|----------|
+| 1 | 构建系统补强 — mosquitto 预编译库 vendored | ✅ | `factory_fw/third_party/mosquitto/` |
+| 2 | 构建系统补强 — MPP / WiFi 库 SDK 探测 | ✅ | `platforms/falcon/CMakeLists.txt` |
+| 3 | 链接顺序脆性彻底修复 | ✅ | `platforms/falcon/CMakeLists.txt:39-44` |
+| 4 | HallSwitchDriver 真实逻辑迁移 | ✅ | `platforms/falcon/drivers/HallSwitchDriver.cpp` |
+| 5 | Tmi8152MotorDriver 真实逻辑迁移 | ✅ | `platforms/falcon/drivers/Tmi8152MotorDriver.cpp` |
+| 6 | Rk3576WifiManager 真实逻辑迁移 | ✅ | `platforms/falcon/drivers/Rk3576WifiManager.cpp` |
+| 7 | Gc4663CameraDriver 骨架迁移 | ✅ | `platforms/falcon/drivers/Gc4663CameraDriver.cpp` |
+| 8 | Cw221xBatteryDriver 骨架迁移 | ✅ | `platforms/falcon/drivers/Cw221xBatteryDriver.cpp` |
+| 9 | RkMppEncoder 完整生产级迁移 | ✅ | `platforms/falcon/drivers/RkMppEncoder.cpp` |
+| 10 | MQTT 集成 — TestEngine 接入 mosquitto loop | ✅ | `src/core/TestEngine.cpp` |
+| 11 | I2cController 扩展（readRegister / writeRegister） | ✅ | `src/hal/I2cController.cpp` |
+| 12 | build_factory.sh 打包逻辑 | ✅ | `platforms/falcon/build_factory.sh` |
+| 13 | 双平台编译 + 隔离构建验证 | ✅ | `build/falcon/`, `build/null/`, `/tmp/fw_iso` |
+
+### 3.3 关键决策与陷阱
+
+#### 决策 1：mosquitto 条件编译（`HAVE_MOSQUITTO`）
+
+**问题**：`factory_core` 被 null / falcon 双平台共享，`TestEngine.cpp` 中的 mosquitto 代码不能硬编码进 null 平台。
+
+**方案**：
+- `factory_fw/CMakeLists.txt`：`if(TARGET_PLATFORM STREQUAL "falcon") add_compile_definitions(HAVE_MOSQUITTO) endif()`
+- `TestEngine.cpp`：`#ifdef HAVE_MOSQUITTO` 包裹所有 mosquitto 调用
+- null 平台编译时自动跳过，保持 stdout-only 的 `publishResult` 行为
+
+#### 决策 2：WiFiManager 中 cJSON → nlohmann/json 替换
+
+**问题**：旧代码 `BleWifiManager` 重度依赖 `cJSON`，但 factory_fw 已统一使用 nlohmann/json。
+
+**方案**：内联 `WifiCfgPack` / `WifiCfgUnpack` / `WifiCfgLength`，全部用 `nlohmann::json::object` + `dump()` 实现，零外部依赖。
+
+#### 决策 3：链接顺序再次发作（factory_hal）
+
+**暴露位置**：`Gc4663CameraDriver.cpp` 调用 `I2cController::readRegister` 时链接报 undefined reference。
+
+**根因**：`platform_falcon`（whole-archive 强制全进）引用了 `factory_hal` 中的符号，但 `factory_hal` 排在 `platform_falcon` 前面，静态库左到右解析时 `factory_hal` 已被处理完毕。
+
+**修复**：在 `platforms/falcon/CMakeLists.txt` 中声明：
+```cmake
+target_link_libraries(platform_falcon PUBLIC
+    factory_platform_common
+    factory_hal
+)
+```
+CMake 自动把被依赖库排在 `platform_falcon` 后面。与评审意见中的"声明式依赖替代手维护链接顺序"完全一致。
+
+#### 决策 4：MPP Encoder 直接沿用旧代码
+
+**问题**：RK3576 与 RV1126B 的 MPP API 是否兼容？
+
+**验证**：旧代码 `MppEncoder.cpp` 使用 `mpp_enc_cfg_set_s32` 新 API（非废弃的 struct-based API），交叉编译通过，`librockchip_mpp.so` 在 SDK sysroot 中存在且头文件路径一致（`<rockchip/rk_mpi.h>`）。
+
+**结论**：API 兼容，直接迁移，类名从 `MppEncoder` 改为 `RkMppEncoder` 以适配 `IEncoder` 接口。
+
+### 3.4 编译验证实录
+
+#### falcon 平台（ARM64 交叉编译）
+
+```bash
+export FALCON_SDK=/home/gdh/falcon/Omni3576-sdk/buildroot/output/rockchip_rk3576_ipc/host
+PLATFORM=falcon ./build.sh
+# [100%] Built target factory_test
+# [build_factory] Done: build/falcon/factory_firmware.tar.gz
+```
+
+产物包含：`factory_test` + `platform.json` + `tests.json` + `libmosquitto.so.1`
+
+#### null 平台回归（x86-64 本地编译）
+
+```bash
+PLATFORM=null ./build.sh
+# [100%] Built target factory_test
+```
+
+#### 隔离构建验证
+
+```bash
+rm -rf /tmp/fw_iso
+cp -r factory_fw /tmp/fw_iso
+rm -rf /tmp/fw_iso/build
+cd /tmp/fw_iso && PLATFORM=null ./build.sh
+# [100%] Built target factory_test
+```
+
+核心不变式（"factory_fw 是可整体搬走的独立项目根"）持续成立。
+
+### 3.5 符号存活验证
+
+```bash
+nm build/falcon/factory_test | grep -E 'HallSwitchDriver|Tmi8152MotorDriver|Rk3576WifiManager|RkMppEncoder|Gc4663CameraDriver|Cw221xBatteryDriver'
+# 全部符号存在（T/W 标志），平台注册活着
+```
+
+### 3.6 仍待后续阶段
+
+| # | 内容 | 优先级 | 说明 |
+|---|------|--------|------|
+| A | LvglDisplayDriver 真实实现 | 中 | 需引入 LVGL 源码（375 文件/13MB）到 `third_party/lvgl/` |
+| B | Rk3576Recorder 完整实现 | 高 | 需迁移 V4l2Recorder + AudioCapture + G711Encoder + Mp4Muxer（约 2000 行）|
+| C | BLE 模块迁移 | 中 | 5 个 BLE 文件，SDK 中已有 `libbluetooth.so` + `libdbus-1.so` |
+| D | Camera/Battery RK3576 硬件差异核对 | 中 | 上板后核对 I2C 总线号、OTP 路径、电量计型号 |
+| E | null 平台 MQTT 模拟支持 | 低 | 当前 null 平台未链接 mosquitto，本地无法模拟 MQTT 交互 |
+
+---
+
 ## 文件索引
 
 ### 设计冻结文档
@@ -510,16 +625,16 @@ file build/falcon/factory_test
 
 ### 核心接口
 - `factory_fw/include/core/DriverRegistry.h` — 通用 Factory 模板
-- `factory_fw/include/core/TestEngine.h` — dispatch / publishResult 声明
+- `factory_fw/include/core/TestEngine.h` — dispatch / publishResult / mosquitto 声明
 - `factory_fw/include/tests/ITestModule.h` — 测试模块接口
 
 ### 平台实现
 - `factory_fw/platforms/falcon/FalconPlatform.cpp` — 平台总入口
-- `factory_fw/platforms/falcon/drivers/*.h` — 8 个 driver 声明
+- `factory_fw/platforms/falcon/drivers/*.h` — 9 个 driver 声明
 - `factory_fw/platforms/falcon/platform.json` — 硬件资源配置
 - `factory_fw/platforms/falcon/tests.json` — 测试项注册表
 
 ### 构建入口
 - `factory_fw/build.sh` — SCRIPT_DIR 锚定
-- `factory_fw/platforms/falcon/CMakeLists.txt` — 平台自包含 CMake
+- `factory_fw/platforms/falcon/CMakeLists.txt` — 平台自包含 CMake + 声明式依赖
 - `factory_fw/platforms/null/CMakeLists.txt` — 独立/聚合两用

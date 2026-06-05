@@ -5,16 +5,18 @@ namespace ft {
 
 class Tmi8152MotorDriver : public IMotorDriver {
 public:
-    bool init() override { initialized_ = true; return true; }
-    void deinit() override { initialized_ = false; }
-    bool move(MotorDirection, float, MotorSpeed, MotorDirect) override { return true; }
-    bool startBoardTest(MotorDirection, unsigned int, int, MotorSpeed, MotorDirect) override {
-        return true;
-    }
-    void stop(MotorDirection) override {}
-    float getPosition(MotorDirection) override { return 0.0f; }
+    bool init() override;
+    void deinit() override;
+    bool move(MotorDirection dir, float angleDeg,
+              MotorSpeed speed, MotorDirect direct) override;
+    bool startBoardTest(MotorDirection dir, unsigned int cycles, int subdivide,
+                        MotorSpeed speed, MotorDirect direct) override;
+    void stop(MotorDirection dir) override;
+    float getPosition(MotorDirection dir) override;
     bool isInitialized() const override { return initialized_; }
+
 private:
+    int fd_ = -1;
     bool initialized_ = false;
 };
 
