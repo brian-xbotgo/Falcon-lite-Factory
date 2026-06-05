@@ -2,6 +2,7 @@ set(HAL_SRCS
     RecorderController.cpp
     I2cController.cpp
     V4l2Recorder.cpp
+    GpioController.cpp
 )
 
 add_library(factory_hal STATIC ${HAL_SRCS})

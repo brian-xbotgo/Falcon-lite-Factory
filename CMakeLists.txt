@@ -11,6 +11,7 @@ add_subdirectory(src/config)
 add_subdirectory(src/hal)
 add_subdirectory(src/tests)
 add_subdirectory(src/platforms/common)
+add_subdirectory(third_party/lvgl)
 
 set(TARGET_PLATFORM "falcon" CACHE STRING "Target platform")
 if(TARGET_PLATFORM STREQUAL "falcon")
