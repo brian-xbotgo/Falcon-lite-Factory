@@ -32,6 +32,10 @@ target_include_directories(platform_falcon PRIVATE
     ${FW_ROOT}/third_party
 )
 
+# 声明式依赖：让 CMake 自动处理链接顺序
+# platform_falcon 引用了 SysfsGpioDriver（定义在 factory_platform_common）
+target_link_libraries(platform_falcon PUBLIC factory_platform_common)
+
 add_executable(factory_test ${FW_ROOT}/src/main.cpp)
 target_link_libraries(factory_test
     factory_core
@@ -42,5 +46,4 @@ target_link_libraries(factory_test
     -Wl,--whole-archive
     platform_falcon
     -Wl,--no-whole-archive
-    factory_platform_common
 )
