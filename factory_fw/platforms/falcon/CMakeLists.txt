@@ -13,6 +13,7 @@ if(NOT TARGET factory_core)
     add_subdirectory(${FW_ROOT}/src/tests         ${CMAKE_BINARY_DIR}/fw_tests)
     add_subdirectory(${FW_ROOT}/src/platforms/common ${CMAKE_BINARY_DIR}/fw_platform_common)
     add_subdirectory(${FW_ROOT}/src/ble           ${CMAKE_BINARY_DIR}/fw_ble)
+    add_subdirectory(${FW_ROOT}/third_party/lvgl  ${CMAKE_BINARY_DIR}/third_party/lvgl)
 endif()
 
 set(FALCON_DRIVER_SRCS
@@ -31,6 +32,9 @@ target_include_directories(platform_falcon PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${FW_ROOT}/include
     ${FW_ROOT}/third_party
+    ${FW_ROOT}/third_party/lvgl
+    ${FW_ROOT}/third_party/lvgl/src
+    ${FW_ROOT}/third_party/lvgl/src/drivers
 )
 
 # 声明式依赖：让 CMake 自动处理链接顺序
@@ -45,6 +49,9 @@ target_link_libraries(platform_falcon PUBLIC rkwifibt)
 
 # Rockchip MPP（SDK sysroot 中提供）
 target_link_libraries(platform_falcon PUBLIC rockchip_mpp)
+
+# LVGL（third_party 源码编译）
+target_link_libraries(platform_falcon PUBLIC lvgl)
 
 # mosquitto（工厂固件 vendored 预编译库）
 target_link_directories(platform_falcon PUBLIC ${FW_ROOT}/third_party/mosquitto/lib)
