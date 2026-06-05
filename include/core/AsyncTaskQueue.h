@@ -26,6 +26,11 @@ public:
 
     void stop();
 
+    // 检测当前线程是否是 worker 线程（用于避免在 worker 中调用 enqueueAndWait 导致死锁）
+    bool isWorkerThread() const {
+        return std::this_thread::get_id() == worker_.get_id();
+    }
+
 private:
     void workerLoop();
 

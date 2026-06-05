@@ -160,31 +160,35 @@ void TestEngine::stop()
 
 void TestEngine::onMqttMessage(const std::string& topic, const std::string& payload)
 {
-    try {
-        nlohmann::json j = nlohmann::json::parse(payload);
-        if (j.contains("module")) {
-            dispatch(topic, j);
-            return;
-        }
-    } catch (...) {
-        // Not a JSON payload, ignore
-    }
-
-    try {
-        for (auto& t : testConfigs_.at("tests")) {
-            if (t.at("topic").get<std::string>() == topic) {
-                if (!t.value("enabled", true)) {
-                    publishResult(topic, TestResult::skipped("test disabled"));
-                    return;
-                }
-                dispatch(topic, t);
+    // 永远走 asyncQueue：mosquitto 回调线程只做"入队"，不阻塞，
+    // 避免 sync 测试卡住 MQTT 网络 I/O 导致 keepalive 超时。
+    asyncQueue_.enqueue([this, topic, payload]() {
+        try {
+            nlohmann::json j = nlohmann::json::parse(payload);
+            if (j.contains("module")) {
+                dispatch(topic, j);
                 return;
             }
+        } catch (...) {
+            // Not a JSON payload, ignore
         }
-        publishResult(topic, TestResult::fail("topic not found in tests.json"));
-    } catch (const std::exception& e) {
-        publishResult(topic, TestResult::fail(std::string("lookup error: ") + e.what()));
-    }
+
+        try {
+            for (auto& t : testConfigs_.at("tests")) {
+                if (t.at("topic").get<std::string>() == topic) {
+                    if (!t.value("enabled", true)) {
+                        publishResult(topic, TestResult::skipped("test disabled"));
+                        return;
+                    }
+                    dispatch(topic, t);
+                    return;
+                }
+            }
+            publishResult(topic, TestResult::fail("topic not found in tests.json"));
+        } catch (const std::exception& e) {
+            publishResult(topic, TestResult::fail(std::string("lookup error: ") + e.what()));
+        }
+    });
 }
 
 void TestEngine::dispatch(const std::string& topic, const nlohmann::json& testCfg)
@@ -219,7 +223,9 @@ void TestEngine::dispatch(const std::string& topic, const nlohmann::json& testCf
         }
     };
 
-    if (testCfg.value("async", false)) {
+    // 若当前线程已是 worker 线程，强制走 async，避免 enqueueAndWait 自死锁
+    bool forceAsync = asyncQueue_.isWorkerThread();
+    if (testCfg.value("async", false) || forceAsync) {
         asyncQueue_.enqueue([task = std::move(task), topic, this]() mutable {
             publishResult(topic, task());
         });
