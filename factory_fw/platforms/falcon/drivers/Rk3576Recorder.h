@@ -1,15 +1,22 @@
 #pragma once
 #include "platforms/common/interface/IRecorder.h"
+#include <memory>
 
 namespace ft {
 
+class V4l2Recorder;
+
 class Rk3576Recorder : public IRecorder {
 public:
-    bool start(const RecorderCmd&) override { recording_ = true; return true; }
-    bool stop() override { recording_ = false; return true; }
-    bool isRecording() const override { return recording_; }
+    Rk3576Recorder();
+    ~Rk3576Recorder() override;
+
+    bool start(const RecorderCmd& cmd) override;
+    bool stop() override;
+    bool isRecording() const override;
+
 private:
-    bool recording_ = false;
+    std::unique_ptr<V4l2Recorder> recorder_;
 };
 
 } // namespace ft
