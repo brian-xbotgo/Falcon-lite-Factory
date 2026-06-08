@@ -64,6 +64,7 @@ set(CONTROL_SRCS
     control/I2cController.cpp
     control/V4l2Recorder.cpp
     control/GpioController.cpp
+    control/StatusLedController.cpp
     control/AudioCapture.cpp
     control/G711Encoder.cpp
     control/Mp4Muxer.cpp
@@ -72,6 +73,7 @@ set(CONTROL_SRCS
 add_library(factory_control STATIC ${CONTROL_SRCS})
 target_include_directories(factory_control PUBLIC
     ${FW_ROOT}/include
+    ${FW_ROOT}/third_party
 )
 target_link_libraries(factory_control PUBLIC factory_platform_common)
 target_compile_features(factory_control PUBLIC cxx_std_17)

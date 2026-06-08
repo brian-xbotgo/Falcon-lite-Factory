@@ -23,7 +23,8 @@ platforms/<platform>/
 {
   "platform": "falcon",
   "gpio": {
-    "led": { "white": 170, "red": 169 }
+    "led": { "white": 89, "red": 144 },
+    "buzzer": 93
   },
   "i2c": {
     "cam0": { "bus": 3, "addr": "0x29" }
