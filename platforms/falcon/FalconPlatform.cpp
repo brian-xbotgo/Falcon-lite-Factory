@@ -35,7 +35,7 @@ void FalconPlatform::registerDrivers(DriverRegistry& reg) {
     reg.bind<ICameraDriver> ([] { return std::make_unique<Gc4663CameraDriver>(); });
     reg.bind<IBatteryDriver>([] { return std::make_unique<Om70x0xBatteryDriver>(); });
     reg.bind<IMotorDriver>  ([] { return std::make_unique<Tmi8152MotorDriver>(); });
-    reg.bind<IHallDriver>   ([] { return std::make_unique<HallSwitchDriver>(); });
+    reg.bind<IHallDriver>   ([cfg = config_] { return std::make_unique<HallSwitchDriver>(cfg); });
     reg.bind<IDisplayDriver>([] { return std::make_unique<LvglDisplayDriver>(); });
     reg.bind<IGpioDriver>   ([] { return std::make_unique<SysfsGpioDriver>(); });
     reg.bind<IRecorder>     ([] { return std::make_unique<Rk3576Recorder>(); });

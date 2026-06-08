@@ -10,15 +10,24 @@
     "backlight": 92,
     "lock_detect": 98,
     "hall": {
-      "upper_limit": 181,
-      "lower_limit": 182
+      "upper_limit": 83,
+      "lower_limit": 82
     }
   },
   "i2c": {
     "cam0": { "bus": 3, "addr": "0x29", "otp": "/proc/otp_eeprom-3-50" },
     "cam1": { "bus": 4, "addr": "0x29", "otp": "/proc/otp_eeprom-4-50" },
     "charger": { "bus": 6, "addr": "0x75", "probe_reg": "0x01", "probe_expect_any": ["0x00", "0x01"] },
-    "fuel_gauge": { "bus": 6, "addr": "0x38", "probe_reg": "0x00", "probe_expect": "0xb1" }
+    "fuel_gauge": { "bus": 6, "addr": "0x38", "probe_reg": "0x00", "probe_expect": "0xb1" },
+    "hall": {
+      "driver": "ads1110",
+      "bus": 3,
+      "addr": "0x48",
+      "sample_count": 120,
+      "sample_interval_ms": 50,
+      "min_voltage": 1.6,
+      "max_voltage": 2.0
+    }
   },
   "battery": {
     "driver": "om70x0x",
