@@ -1,4 +1,5 @@
 #include "drivers/Rk3576Recorder.h"
+#include "drivers/RkMppEncoder.h"
 #include "control/V4l2Recorder.h"
 
 namespace ft {
@@ -8,7 +9,8 @@ Rk3576Recorder::Rk3576Recorder()
     RecorderConfig cfg;
     cfg.cameras.push_back({"/dev/video0", 1280, 720, "MJPG", 30, "/tmp/cam0.mp4", 4});
     cfg.audio.enabled = true;
-    recorder_.reset(createV4l2Recorder(cfg));
+    recorder_.reset(createV4l2Recorder(
+        cfg, [] { return std::make_unique<RkMppEncoder>(); }));
 }
 
 Rk3576Recorder::~Rk3576Recorder() = default;

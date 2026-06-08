@@ -23,6 +23,7 @@
 #include <linux/videodev2.h>
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ft {
@@ -234,13 +235,21 @@ static void unmapBuffers(std::vector<MappedBuffer>& bufs) {
 // ──────────────────────────────────────────────────────────────────────────────
 
 V4l2Recorder::V4l2Recorder(const RecorderConfig& cfg)
-    : m_cfg(cfg)
+    : V4l2Recorder(cfg, [] { return std::unique_ptr<IEncoder>(); })
+{
+}
+
+V4l2Recorder::V4l2Recorder(const RecorderConfig& cfg, EncoderFactory encoderFactory)
+    : m_cfg(cfg), m_encoderFactory(std::move(encoderFactory))
 {
     m_workers.reserve(m_cfg.cameras.size());
     for (const auto& cam : m_cfg.cameras) {
         auto w = std::make_unique<CameraWorker>();
         w->cfg     = cam;
         w->running = false;
+        if (m_encoderFactory) {
+            w->encoder = m_encoderFactory();
+        }
         m_workers.push_back(std::move(w));
     }
 }
@@ -363,16 +372,16 @@ bool V4l2Recorder::startCamera(CameraWorker& w, bool isFirst) {
 
     w.hasAudio = isFirst && m_cfg.audio.enabled;
 
-    // Init MPP H.264 encoder
+    // Init platform-provided H.264 encoder.
     {
-        MppEncoderConfig enc_cfg;
+        EncoderConfig enc_cfg;
         enc_cfg.width  = w.cfg.width;
         enc_cfg.height = w.cfg.height;
         enc_cfg.fps    = w.cfg.fps;
         enc_cfg.bitrate_kbps = 2000;
         enc_cfg.gop    = 60;
-        if (!w.encoder.init(enc_cfg)) {
-            std::fprintf(stderr, "[v4l2] failed to init MPP encoder for %s\n", d.c_str());
+        if (!w.encoder || !w.encoder->init(enc_cfg)) {
+            std::fprintf(stderr, "[v4l2] failed to init encoder for %s\n", d.c_str());
             stopCamera(w, isFirst);
             return false;
         }
@@ -417,8 +426,8 @@ void V4l2Recorder::stopCamera(CameraWorker& w, bool isFirst) {
         w.fd = -1;
     }
 
-    if (w.encoder.isInitialized()) {
-        w.encoder.deinit();
+    if (w.encoder && w.encoder->isInitialized()) {
+        w.encoder->deinit();
     }
 
     // Finalize MP4 muxer (writes moov box, closes file)
@@ -528,8 +537,9 @@ void V4l2Recorder::cameraLoop(CameraWorker& w) {
         if (bytes_used > 0 && w.muxer.isOpen()) {
             const uint8_t* enc_data = nullptr;
             size_t enc_size = 0;
-            if (w.encoder.encode(static_cast<const uint8_t*>(bufs[buf.index].start),
-                                 bytes_used, &enc_data, &enc_size)) {
+            if (w.encoder &&
+                w.encoder->encode(static_cast<const uint8_t*>(bufs[buf.index].start),
+                                  bytes_used, &enc_data, &enc_size)) {
                 // Detect keyframe by checking NAL type 5 (IDR)
                 bool is_key = false;
                 if (enc_size >= 5) {
@@ -642,6 +652,11 @@ void V4l2Recorder::audioLoop() {
 
 V4l2Recorder* createV4l2Recorder(const RecorderConfig& cfg) {
     return new V4l2Recorder(cfg);
+}
+
+V4l2Recorder* createV4l2Recorder(const RecorderConfig& cfg,
+                                 V4l2Recorder::EncoderFactory encoderFactory) {
+    return new V4l2Recorder(cfg, std::move(encoderFactory));
 }
 
 } // namespace ft

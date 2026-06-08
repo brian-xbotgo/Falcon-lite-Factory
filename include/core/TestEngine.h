@@ -25,8 +25,10 @@ public:
     void onMqttMessage(const std::string& topic, const std::string& payload);
 
 private:
-    void dispatch(const std::string& topic, const nlohmann::json& testCfg);
-    void publishResult(const std::string& topic, const TestResult& result);
+    void dispatch(const std::string& topic, const nlohmann::json& testCfg,
+                  const std::string& requestPayload);
+    void publishResult(const std::string& topic, const TestResult& result,
+                       const std::string& requestPayload);
     bool connectMqtt();
 
     const DriverRegistry& drivers_;

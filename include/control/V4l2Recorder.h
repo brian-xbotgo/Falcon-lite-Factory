@@ -1,8 +1,9 @@
 #pragma once
 #include "platforms/common/interface/IRecorder.h"
-#include "control/MppEncoder.h"
+#include "platforms/common/interface/IEncoder.h"
 #include "control/Mp4Muxer.h"
 #include "control/AudioCapture.h"
+#include <functional>
 #include <string>
 #include <vector>
 #include <thread>
@@ -19,7 +20,10 @@ namespace ft {
 
 class V4l2Recorder : public IRecorder {
 public:
+    using EncoderFactory = std::function<std::unique_ptr<IEncoder>()>;
+
     explicit V4l2Recorder(const RecorderConfig& cfg);
+    V4l2Recorder(const RecorderConfig& cfg, EncoderFactory encoderFactory);
     ~V4l2Recorder() override;
 
     // ---- IRecorder interface ----
@@ -38,7 +42,7 @@ private:
         std::thread     thread;
         std::atomic<bool> running{false};
         bool            mplane  = false;  // true if device uses V4L2 multi-plane API
-        MppEncoder      encoder;
+        std::unique_ptr<IEncoder> encoder;
         Mp4Muxer        muxer;            // replaces raw fwrite — writes .mp4
         bool            hasAudio = false;  // true for the first camera (binds audio)
     };
@@ -61,6 +65,7 @@ private:
     static unsigned int fourccFromString(const std::string& s);
 
     RecorderConfig                              m_cfg;
+    EncoderFactory                              m_encoderFactory;
     std::vector<std::unique_ptr<CameraWorker>>  m_workers;
     std::atomic<bool>                           m_active{false};
 
@@ -72,5 +77,7 @@ private:
 
 // Factory
 V4l2Recorder* createV4l2Recorder(const RecorderConfig& cfg);
+V4l2Recorder* createV4l2Recorder(const RecorderConfig& cfg,
+                                 V4l2Recorder::EncoderFactory encoderFactory);
 
 } // namespace ft

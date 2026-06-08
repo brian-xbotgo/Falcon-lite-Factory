@@ -11,18 +11,18 @@
 | 文件 | 职责 | 对应 topic |
 |------|------|------------|
 | `include/tests/ITestModule.h` | 测试模块纯虚接口 | — |
-| `src/tests/CameraTest.cpp` | 摄像头探测 + OTP 验证 | `15R` |
-| `src/tests/BatteryTest.cpp` | 电池电压/百分比检测 | `10R` |
-| `src/tests/MotorTest.cpp` | 电机功能测试 | `16R` |
-| `src/tests/HallTest.cpp` | 霍尔传感器测试 | `22R` |
-| `src/tests/MicTest.cpp` | 麦克风灵敏度 + THD 检测 | `14R` |
-| `src/tests/KeyTest.cpp` | 按键响应测试 | `13R` |
-| `src/tests/WifiTest.cpp` | WiFi 扫描/连接/信号强度 | `20R` |
-| `src/tests/SocTest.cpp` | SoC 型号 + 温度 + 电压检测 | `7R` |
-| `src/tests/RtcTest.cpp` | RTC 功能测试 | `21R` |
-| `src/tests/TfCardTest.cpp` | TF 卡读写测试 | `17R` |
-| `src/tests/SysTest.cpp` | 系统版本 + 日志检查 | `5R` |
-| `src/tests/AgingTest.cpp` | 老化压测 | `11R` |
+| `src/tests/RtcTest.cpp` | RTC 功能测试 | `10R` |
+| `src/tests/MicTest.cpp` | 麦克风测试 | `11R`、`23R` |
+| `src/tests/SocTest.cpp` | SoC 子系统检测 | `12R` |
+| `src/tests/TfCardTest.cpp` | TF 卡读写测试 | `14R` |
+| `src/tests/BatteryTest.cpp` | 电池电压/百分比检测 | `15R`、`24R` |
+| `src/tests/WifiTest.cpp` | WiFi 扫描/连接/信号强度 | `16R`、`37R` |
+| `src/tests/KeyTest.cpp` | 按键响应测试 | `17R`、`20R` |
+| `src/tests/CameraTest.cpp` | 摄像头探测 + OTP 验证 | `18R`、`22R`、`28R` |
+| `src/tests/HallTest.cpp` | 霍尔传感器测试 | `21R`、`27R` |
+| `src/tests/SysTest.cpp` | 系统版本 + 日志检查 | `26R`、`31R`、`50R` |
+| `src/tests/AgingTest.cpp` | 老化压测 | `30R`、`32R`、`34R`、`36R` |
+| `src/tests/MotorTest.cpp` | 电机功能测试 | 当前 FALCON `tests.json` 未注册 |
 
 ## 接口契约
 

@@ -5,15 +5,112 @@
 #include "tests/ITestModule.h"
 #include "config/PlatformConfig.h"
 #include <cstdio>
+#include <cstdint>
 #include <fstream>
 #include <thread>
 #include <chrono>
+#include <algorithm>
+#include <sys/stat.h>
 
 #ifdef HAVE_MOSQUITTO
 #include <mosquitto.h>
 #endif
 
 namespace ft {
+
+namespace {
+
+constexpr size_t kRequestPayloadSize = 38;
+constexpr size_t kResponsePayloadSize = 42;
+
+std::string answerTopicFor(const std::string& requestTopic)
+{
+    if (!requestTopic.empty() && requestTopic.back() == 'R') {
+        std::string answer = requestTopic;
+        answer.back() = 'A';
+        return answer;
+    }
+    return requestTopic + "A";
+}
+
+uint32_t errorCodeFromResult(const TestResult& result)
+{
+    if (result.status == TestResult::Status::Pass) {
+        return 0;
+    }
+
+    try {
+        if (result.data.is_object() && result.data.contains("error_code")) {
+            return result.data.at("error_code").get<uint32_t>();
+        }
+    } catch (...) {
+        // Fall through to the protocol-level generic failure bit.
+    }
+
+    return 1;
+}
+
+std::string protocolResponsePayload(const std::string& requestPayload,
+                                    uint32_t errorCode)
+{
+    std::string payload(kResponsePayloadSize, '\0');
+    const size_t copyLen = std::min(requestPayload.size(), kRequestPayloadSize);
+    std::copy_n(requestPayload.data(), copyLen, payload.data());
+
+    payload[38] = static_cast<char>((errorCode >> 24) & 0xff);
+    payload[39] = static_cast<char>((errorCode >> 16) & 0xff);
+    payload[40] = static_cast<char>((errorCode >> 8) & 0xff);
+    payload[41] = static_cast<char>(errorCode & 0xff);
+    return payload;
+}
+
+std::string trimProtocolText(std::string value)
+{
+    const auto nul = value.find('\0');
+    if (nul != std::string::npos) {
+        value.resize(nul);
+    }
+    while (!value.empty() && value.back() == ' ') {
+        value.pop_back();
+    }
+    return value;
+}
+
+void persistSnFromPayload(const std::string& requestPayload)
+{
+    if (requestPayload.size() < kRequestPayloadSize) {
+        return;
+    }
+
+    const auto sn = trimProtocolText(requestPayload.substr(0, 14));
+    if (sn.empty()) {
+        return;
+    }
+
+    constexpr const char* kDeviceDataDir = "/device_data";
+    constexpr const char* kPcbaSnPath = "/device_data/pcba.txt";
+    mkdir(kDeviceDataDir, 0755);
+
+    {
+        std::ifstream existing(kPcbaSnPath);
+        std::string line;
+        while (std::getline(existing, line)) {
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+            if (trimProtocolText(line) == sn) {
+                return;
+            }
+        }
+    }
+
+    std::ofstream out(kPcbaSnPath, std::ios::app);
+    if (out.is_open()) {
+        out << sn << '\n';
+    }
+}
+
+} // namespace
 
 #ifdef HAVE_MOSQUITTO
 static void onMqttMessageCallback(struct mosquitto*, void* userdata,
@@ -34,7 +131,7 @@ TestEngine::TestEngine(const DriverRegistry& drivers, const PlatformConfig& cfg)
 {
 #ifdef HAVE_MOSQUITTO
     mosquitto_lib_init();
-    mqttClient_ = mosquitto_new("factory_test", true, this);
+    mqttClient_ = mosquitto_new("prodTest", true, this);
     if (mqttClient_) {
         mosquitto_message_callback_set(mqttClient_, onMqttMessageCallback);
     } else {
@@ -121,7 +218,7 @@ bool TestEngine::connectMqtt()
         for (auto& t : testConfigs_["tests"]) {
             if (t.contains("topic")) {
                 std::string topic = t["topic"].get<std::string>();
-                mosquitto_subscribe(mqttClient_, nullptr, topic.c_str(), 0);
+                mosquitto_subscribe(mqttClient_, nullptr, topic.c_str(), 2);
             }
         }
     }
@@ -166,32 +263,34 @@ void TestEngine::onMqttMessage(const std::string& topic, const std::string& payl
         try {
             nlohmann::json j = nlohmann::json::parse(payload);
             if (j.contains("module")) {
-                dispatch(topic, j);
+                dispatch(topic, j, payload);
                 return;
             }
         } catch (...) {
-            // Not a JSON payload, ignore
+            persistSnFromPayload(payload);
         }
 
         try {
             for (auto& t : testConfigs_.at("tests")) {
                 if (t.at("topic").get<std::string>() == topic) {
                     if (!t.value("enabled", true)) {
-                        publishResult(topic, TestResult::skipped("test disabled"));
+                        publishResult(topic, TestResult::skipped("test disabled"), payload);
                         return;
                     }
-                    dispatch(topic, t);
+                    dispatch(topic, t, payload);
                     return;
                 }
             }
-            publishResult(topic, TestResult::fail("topic not found in tests.json"));
+            publishResult(topic, TestResult::fail("topic not found in tests.json"), payload);
         } catch (const std::exception& e) {
-            publishResult(topic, TestResult::fail(std::string("lookup error: ") + e.what()));
+            publishResult(topic, TestResult::fail(std::string("lookup error: ") + e.what()),
+                          payload);
         }
     });
 }
 
-void TestEngine::dispatch(const std::string& topic, const nlohmann::json& testCfg)
+void TestEngine::dispatch(const std::string& topic, const nlohmann::json& testCfg,
+                          const std::string& requestPayload)
 {
     std::unique_ptr<ITestModule> mod;
     try {
@@ -199,12 +298,13 @@ void TestEngine::dispatch(const std::string& topic, const nlohmann::json& testCf
             testCfg.at("module").get<std::string>());
     } catch (const std::exception& e) {
         publishResult(topic,
-            TestResult::fail(std::string("bad config: ") + e.what()));
+            TestResult::fail(std::string("bad config: ") + e.what()),
+            requestPayload);
         return;
     }
 
     if (!mod) {
-        publishResult(topic, TestResult::fail("unknown module"));
+        publishResult(topic, TestResult::fail("unknown module"), requestPayload);
         return;
     }
 
@@ -226,15 +326,16 @@ void TestEngine::dispatch(const std::string& topic, const nlohmann::json& testCf
     // 若当前线程已是 worker 线程，强制走 async，避免 enqueueAndWait 自死锁
     bool forceAsync = asyncQueue_.isWorkerThread();
     if (testCfg.value("async", false) || forceAsync) {
-        asyncQueue_.enqueue([task = std::move(task), topic, this]() mutable {
-            publishResult(topic, task());
+        asyncQueue_.enqueue([task = std::move(task), topic, requestPayload, this]() mutable {
+            publishResult(topic, task(), requestPayload);
         });
     } else {
-        publishResult(topic, asyncQueue_.enqueueAndWait(std::move(task)));
+        publishResult(topic, asyncQueue_.enqueueAndWait(std::move(task)), requestPayload);
     }
 }
 
-void TestEngine::publishResult(const std::string& topic, const TestResult& result)
+void TestEngine::publishResult(const std::string& topic, const TestResult& result,
+                               const std::string& requestPayload)
 {
     std::lock_guard<std::mutex> lock(mqttMutex_);
     const char* statusStr = "UNKNOWN";
@@ -250,17 +351,14 @@ void TestEngine::publishResult(const std::string& topic, const TestResult& resul
 #ifdef HAVE_MOSQUITTO
     if (mqttClient_) {
         try {
-            nlohmann::json j = {
-                {"topic", topic},
-                {"status", statusStr},
-                {"detail", result.detail}
-            };
-            std::string payload = j.dump();
-            mosquitto_publish(mqttClient_, nullptr, topic.c_str(),
+            const auto errorCode = errorCodeFromResult(result);
+            const auto answerTopic = answerTopicFor(topic);
+            const auto payload = protocolResponsePayload(requestPayload, errorCode);
+            mosquitto_publish(mqttClient_, nullptr, answerTopic.c_str(),
                               static_cast<int>(payload.size()),
-                              payload.c_str(), 0, false);
+                              payload.data(), 2, false);
         } catch (...) {
-            // JSON serialization failure, ignore
+            // Protocol serialization failure, ignore.
         }
     }
 #endif

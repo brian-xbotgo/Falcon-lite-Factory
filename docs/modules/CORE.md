@@ -23,7 +23,7 @@
 | `include/core/TestEngine.h` | 测试引擎：MQTT 集成、调度、结果上报 |
 | `src/core/ModuleRegistry.cpp` | ModuleRegistry 单例实现 |
 | `src/core/AsyncTaskQueue.cpp` | 单 worker 线程实现 |
-| `src/core/TestEngine.cpp` | 引擎骨架（TODO：dispatch / MQTT / publishResult） |
+| `src/core/TestEngine.cpp` | MQTT topic 路由、sync/async 调度、协议格式结果上报 |
 
 ## DriverRegistry
 
@@ -81,9 +81,8 @@ class TestContext {
 
 ## TestEngine（当前状态）
 
-Phase 1 骨架已完成：
 - `loadTestConfig()`：启动期校验 tests.json（module 存在性、topic 完整性）
-- `run()`：空循环（TODO：集成 MQTT loop）
-- `onMqttMessage()`：空桩（TODO：topic → testCfg 查找）
-- `dispatch()`：空桩（TODO：sync/async 派发 + 异常守卫）
-- `publishResult()`：空桩（TODO：mosquitto_publish + 锁）
+- `run()`：连接本地 MQTT broker，订阅 tests.json 中的请求 topic，并启动 mosquitto loop
+- `onMqttMessage()`：解析协议请求，按 topic 查找 testCfg，随任务传递原始 payload，统一入队避免阻塞 MQTT 回调线程
+- `dispatch()`：创建测试模块，按 `async` 配置执行，并捕获异常转为失败结果
+- `publishResult()`：按产测协议将 `xxR` 结果发布到 `xxA`，payload 为请求 38 字节头 + 4 字节大端 error_code

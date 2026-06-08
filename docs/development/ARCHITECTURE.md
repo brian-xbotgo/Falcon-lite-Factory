@@ -31,6 +31,8 @@ factory_fw/
 - `Base*` 是基础兜底实现，替代原来的 `Null*` 命名；基础平台名统一为 `base`。
 - `factory_fw/src/CMakeLists.txt` 是 src 内唯一 CMake 入口，负责 core/common/config/control/tests/platform_common/ble 的目标定义。
 - 平台 CMake 只负责平台 driver、平台链接和最终 `factory_test` 可执行文件。
+- MQTT 产测请求 topic 使用 `xxR`，结果发布到 `xxA`；响应 payload 为请求 38 字节头 + 4 字节大端 `error_code`。
+- `src/control` 不包含平台 driver 头文件；录像链路通过 `IEncoder` 工厂注入编码器，FALCON 平台在 `Rk3576Recorder` 中注入 `RkMppEncoder`。
 
 ## 数据流
 
