@@ -74,7 +74,18 @@ void LvglDisplayDriver::updateTimerCb(lv_timer_t* t) {
     // Battery model (read once until found)
     static bool model_read = false;
     if (!model_read && self->model_label_) {
-        std::string m = read_file("/sys/class/power_supply/cw221X-bat/model_name");
+        std::string m = read_file("/sys/class/power_supply/om70X0X-bat/model_name");
+        if (m.empty()) {
+            const std::string uevent =
+                read_file("/sys/class/power_supply/om70X0X-bat/uevent");
+            const std::string key = "POWER_SUPPLY_NAME=";
+            const auto pos = uevent.find(key);
+            if (pos != std::string::npos) {
+                const auto start = pos + key.size();
+                const auto end = uevent.find('\n', start);
+                m = uevent.substr(start, end == std::string::npos ? std::string::npos : end - start);
+            }
+        }
         if (!m.empty()) {
             while (!m.empty() && (m.back() == '\n' || m.back() == '\r')) m.pop_back();
             if (!m.empty()) {
@@ -229,6 +240,7 @@ bool LvglDisplayDriver::init() {
     update_timer_ = lv_timer_create(updateTimerCb, 1000, this);
 
     backlight_init();
+    lv_refr_now(nullptr);
 
     initialized_ = true;
     std::fprintf(stderr, "[LvglDisplay] initialized %dx%d, font=%s\n", DISP_W, DISP_H, FONT_PATH);
