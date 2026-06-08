@@ -22,7 +22,7 @@
 | `src/tests/HallTest.cpp` | 霍尔传感器测试 | `21R`、`27R` |
 | `src/tests/SysTest.cpp` | 系统版本 + 日志检查 | `26R`、`31R`、`50R` |
 | `src/tests/AgingTest.cpp` | 老化压测 | `30R`、`32R`、`34R`、`36R` |
-| `src/tests/MotorTest.cpp` | 电机功能测试 | 当前 FALCON `tests.json` 未注册 |
+| `src/tests/MotorTest.cpp` | 电机功能测试 | `191R`、`192R`、`291R`、`292R`、`293R`、`294R` |
 
 ## 接口契约
 

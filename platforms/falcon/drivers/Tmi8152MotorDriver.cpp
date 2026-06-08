@@ -19,10 +19,10 @@ static int toChannel(MotorDirection dir) {
 static int toMotorSpeedGear(MotorSpeed speed) {
     switch (speed) {
         case SPEED_LOW:  return MOTOR_SPEED_10_36_8;
-        case SPEED_MID:  return MOTOR_SPEED_5_58_1;
+        case SPEED_MID:  return MOTOR_SPEED_4_71_8;
         case SPEED_HIGH: return MOTOR_SPEED_0_111_0;
     }
-    return MOTOR_SPEED_5_58_1;
+    return MOTOR_SPEED_4_71_8;
 }
 
 static int toDirectSelect(MotorDirect direct) {
@@ -119,41 +119,35 @@ bool Tmi8152MotorDriver::startBoardTest(MotorDirection dir, unsigned int cycles,
 {
     if (!initialized_) return false;
 
-    int fd = ::open(MOTOR_DEV_PATH, O_RDWR);
-    if (fd < 0) {
-        std::fprintf(stderr, "[Tmi8152] cannot open %s for board test\n", MOTOR_DEV_PATH);
-        return false;
-    }
+    (void)subdivide;
 
     struct chx_mode mode = {};
     mode.chx  = static_cast<channel_select>(toChannel(dir));
     mode.mode = AOTU_CTRL;
-    ::ioctl(fd, SET_MODE, &mode);
+    ::ioctl(fd_, SET_MODE, &mode);
 
     struct chx_enable config = {};
     config.chx       = static_cast<channel_select>(toChannel(dir));
-    config.subdivide = static_cast<subdivide_select>(toSubdivideSelect(subdivide));
+    config.subdivide = SUBDIVIDE128;
     config.direct    = static_cast<direct_select>(toDirectSelect(direct));
     config.phase     = 0;
     config.cycles    = static_cast<int>(cycles);
     config.speed     = static_cast<motor_speed_gear>(toMotorSpeedGear(speed));
 
-    if (::ioctl(fd, CHAN_START_TEST, &config) < 0) {
-        std::fprintf(stderr, "[Tmi8152] CHAN_START_TEST failed: %s\n", std::strerror(errno));
-        ::close(fd);
+    if (::ioctl(fd_, CHAN_START, &config) < 0) {
+        std::fprintf(stderr, "[Tmi8152] CHAN_START failed: %s\n", std::strerror(errno));
         return false;
     }
-    ::close(fd);
     return true;
 }
 
 void Tmi8152MotorDriver::stop(MotorDirection dir)
 {
     if (!initialized_ || fd_ < 0) return;
-    struct chx_enable params = {};
-    params.chx = static_cast<channel_select>(toChannel(dir));
-    params.direct = STOP;
-    ::ioctl(fd_, CHAN_STOP, &params);
+    auto channel = static_cast<channel_select>(toChannel(dir));
+    if (::ioctl(fd_, CHAN_STOP, &channel) < 0) {
+        std::fprintf(stderr, "[Tmi8152] CHAN_STOP failed: %s\n", std::strerror(errno));
+    }
 }
 
 float Tmi8152MotorDriver::getPosition(MotorDirection dir)

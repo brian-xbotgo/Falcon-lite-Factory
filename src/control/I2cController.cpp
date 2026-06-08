@@ -16,7 +16,11 @@ bool I2cController::readByte(int bus, int addr, uint8_t reg, uint8_t& value) {
     snprintf(cmd, sizeof(cmd), "i2cget -f -y %d 0x%02x 0x%02x", bus, addr, reg);
     auto result = shell_exec(cmd);
     if (result.empty()) return false;
-    value = static_cast<uint8_t>(std::stoi(result, nullptr, 0));
+    try {
+        value = static_cast<uint8_t>(std::stoi(result, nullptr, 0));
+    } catch (...) {
+        return false;
+    }
     return true;
 }
 
