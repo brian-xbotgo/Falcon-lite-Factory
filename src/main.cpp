@@ -4,6 +4,9 @@
 #include "control/StatusLedController.h"
 #include "platforms/common/interface/IPlatform.h"
 #include "platforms/common/interface/IDisplayDriver.h"
+#ifdef HAVE_MOSQUITTO
+#include "ble/BleAdvertiser.h"
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
@@ -11,6 +14,7 @@
 #include <algorithm>
 #include <atomic>
 #include <csignal>
+#include <string>
 
 using namespace ft;
 
@@ -85,6 +89,20 @@ int main() {
         engine.run();
     });
 
+#ifdef HAVE_MOSQUITTO
+    ft::BleAdvertiser bleAdvertiser;
+    std::thread bleThread;
+    const char* bleEnabled = std::getenv("FACTORY_ENABLE_BLE");
+    if (!bleEnabled || std::string(bleEnabled) != "0") {
+        bleThread = std::thread([&bleAdvertiser]() {
+            const int rc = bleAdvertiser.run();
+            if (rc != 0) {
+                std::fprintf(stderr, "[main] BLE service exited rc=%d\n", rc);
+            }
+        });
+    }
+#endif
+
     while (!gQuit) {
         uint32_t sleepMs = 10;
         if (display && display->isInitialized()) {
@@ -96,6 +114,12 @@ int main() {
 
     engine.stop();
     engineThread.join();
+#ifdef HAVE_MOSQUITTO
+    bleAdvertiser.shutdown();
+    if (bleThread.joinable()) {
+        bleThread.join();
+    }
+#endif
     statusLed.stop();
     if (display) display->deinit();
     return 0;

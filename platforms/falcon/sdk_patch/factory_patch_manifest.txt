@@ -1,0 +1,36 @@
+# FALCON factory firmware SDK patch checklist
+#
+# Source reference:
+# /home/gdh/falcon/app/lastcode20251210/XbotGo-Dragonfly-Embedded/sdk_patch
+#
+# Keep hardware/runtime enablement. Do not carry normal business app startup into
+# the factory package.
+
+kernel_patch/dragonfly.dts
+kernel_patch/dragonfly-core3576.dtsi
+kernel_patch/dragonfly-cam.dtsi
+kernel_patch/dragonfly-key.dtsi
+kernel_patch/dragonfly-motor.dtsi
+kernel_patch/dragonfly-pcie.dtsi
+kernel_patch/dragonfly-usb-c.dtsi
+kernel_patch/dragonfly-wireless.dtsi
+kernel_patch/dragonfly-wifi.patch
+kernel_patch/allow_connect_two_role.patch
+kernel_patch/usb_charger_detect.patch
+kernel_patch/0001-mmc-dw_mmc-prevent-kernel-panic-on-sd-card-errors.patch
+kernel_patch/fbtft_nv3007.patch
+kernel_patch/driver_media_i2c_Makefile.patch
+kernel_patch/motor_tmi8152/motor_tmi8152.ko
+kernel_patch/om70x0x_battery/battery.ko
+
+buildroot_patch/S40bluetoothd
+buildroot_patch/S50usbdevice.sh
+buildroot_patch/dragonfly-bt.patch
+buildroot_patch/profile
+buildroot_patch/post-build.sh
+external/wpa_supplicant.conf
+external/dnsmasq.conf
+
+# Exclude from the independent factory package:
+# buildroot_patch/S90dragonfly, misc_app, prod_test, normal_lvgl_app,
+# charge_lvgl_app, multi_media, file_mng, http_agent.

@@ -1,0 +1,20 @@
+#!/bin/sh
+
+case "$1" in
+    start)
+        echo "Starting factory firmware"
+        /oem/usr/scripts/factory_start.sh start &
+        ;;
+    stop)
+        /oem/usr/scripts/factory_start.sh stop
+        ;;
+    restart)
+        /oem/usr/scripts/factory_start.sh restart &
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

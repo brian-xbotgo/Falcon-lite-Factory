@@ -30,11 +30,9 @@ int BleMqttBridge::init(bool factoryMode, bool waitForSn)
 {
     m_factoryMode = factoryMode;
 
-    mosquitto_lib_init();
     m_mosq = mosquitto_new(MQTT_CLIENT_ID, true, this);
     if (!m_mosq) {
         LOG("Failed to create mosquitto instance\n");
-        mosquitto_lib_cleanup();
         return -1;
     }
 
@@ -45,7 +43,6 @@ int BleMqttBridge::init(bool factoryMode, bool waitForSn)
         LOG("Failed to connect to MQTT broker %s:%d\n", MQTT_HOST, MQTT_PORT);
         mosquitto_destroy(m_mosq);
         m_mosq = nullptr;
-        mosquitto_lib_cleanup();
         return -1;
     }
 
@@ -53,7 +50,6 @@ int BleMqttBridge::init(bool factoryMode, bool waitForSn)
         LOG("Failed to start mosquitto loop\n");
         mosquitto_destroy(m_mosq);
         m_mosq = nullptr;
-        mosquitto_lib_cleanup();
         return -1;
     }
 
@@ -75,7 +71,6 @@ void BleMqttBridge::deinit()
         mosquitto_destroy(m_mosq);
         m_mosq = nullptr;
     }
-    mosquitto_lib_cleanup();
 }
 
 void BleMqttBridge::onMessage(const mosquitto_message* msg)
@@ -87,12 +82,11 @@ void BleMqttBridge::onMessage(const mosquitto_message* msg)
 
     // Extract SN from any test command payload: first 14 bytes
     // e.g. topic="17R", payload="11111111111111f648909b-af47-4419e0abfd" → SN="11111111111111"
-    if (m_factoryMode && !m_snValid) {
+    if (m_factoryMode) {
         if (payloadlen >= SN_LEN) {
             memcpy(m_sn, payload, SN_LEN);
             m_snValid = true;
             LOG("Got SN from [%s]: %.*s\n", msg->topic, SN_LEN, m_sn);
-            return;
         }
     }
 

@@ -45,3 +45,9 @@ PLATFORM=falcon ./build.sh
 ```bash
 rm -rf build/
 ```
+
+## FALCON independent package
+
+The FALCON build also produces `build/falcon/factory_firmware.tar.gz`.
+See `docs/usage/FALCON_FACTORY_PACKAGE.md` for SDK patch, deployment,
+startup script, MQTT, RNDIS, and BLE notes.

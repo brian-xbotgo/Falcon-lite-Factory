@@ -107,6 +107,7 @@ if(FACTORY_ENABLE_BLE)
         ble/BleGattServer.cpp
         ble/BleMqttBridge.cpp
         ble/BleUtility.cpp
+        ble/BleWifiManager.cpp
     )
 
     add_library(factory_ble STATIC ${BLE_SRCS})
@@ -122,6 +123,7 @@ if(FACTORY_ENABLE_BLE)
         mosquitto
         glib-2.0
         gio-2.0
+        gobject-2.0
         pthread
     )
 endif()

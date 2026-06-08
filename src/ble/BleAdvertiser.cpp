@@ -116,9 +116,9 @@ int BleAdvertiser::run()
     LOG("BLE name: %s\n", bleName);
     if (!m_factoryMode) m_deviceInfo.loadDeviceAlias();
 
-    // 2. Init MQTT (block until SN received in factory mode)
-    // In factory mode, wait for SN through MQTT
-    if (m_mqtt.init(m_factoryMode, m_factoryMode) != 0) {
+    // 2. Init MQTT. Factory firmware must advertise even before the station
+    // sends SN, so SN is picked up asynchronously and reflected in ADV later.
+    if (m_mqtt.init(m_factoryMode, false) != 0) {
         LOG("MQTT init failed\n");
         return -1;
     }
