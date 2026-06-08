@@ -18,11 +18,18 @@ public:
     bool isInitialized() const override { return initialized_; }
 
 private:
+    enum class ActiveDriver {
+        None,
+        Ads1110,
+        Ads122u04,
+    };
+
     struct Config {
-        std::string driver = "ads1110";
+        std::string driver = "auto";
         int bus = 3;
         std::vector<int> busCandidates = {3, 2, 0, 1, 4, 5, 6, 7, 8, 9};
         int addr = 0x48;
+        std::vector<std::string> uartCandidates = {"/dev/ttyS9", "/dev/ttyS11"};
         int sampleCount = 120;
         int sampleIntervalMs = 50;
         float minVoltage = 1.6f;
@@ -32,7 +39,16 @@ private:
     bool initAds1110();
     bool initAds1110OnBus(int bus);
     bool readAds1110(float& value);
+    bool initAds122u04();
+    bool initAds122u04OnUart(const std::string& path);
+    bool readAds122u04(float& value);
+    bool ads122WriteReg(uint8_t reg, uint8_t value);
+    bool ads122ReadReg(uint8_t reg, uint8_t& value);
+    bool ads122SendCmd(uint8_t cmd);
+    int ads122SendRecv(const uint8_t* tx, size_t txLen,
+                       uint8_t* rx, size_t rxLen, int timeoutMs);
     static std::string busPath(int bus);
+    static uint64_t monotonicMs();
     static int parseIntValue(const nlohmann::json& value, int fallback);
     static float parseFloatValue(const nlohmann::json& value, float fallback);
     static Config parseConfig(const nlohmann::json& root);
@@ -40,6 +56,11 @@ private:
     Config config_;
     int fd_ = -1;
     bool initialized_ = false;
+    ActiveDriver activeDriver_ = ActiveDriver::None;
+    std::string activePath_;
+    bool ads122CrcEnabled_ = false;
+    bool ads122DcntEnabled_ = false;
+    uint8_t ads122LastDcnt_ = 0;
     mutable std::mutex mutex_;
 };
 
