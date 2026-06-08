@@ -1,77 +1,49 @@
 # 架构说明
 
-## 核心不变式
+## 当前定位
 
-> **factory_fw 是可整体搬走的独立项目根。**
->
-> 判据：把 `factory_fw/` 整个目录拷到任意路径，`cd` 进去 `./build.sh` 必须能编出固件。
->
-> 推论：`factory_fw` 内部任何文件都不许引用 `factory_fw` 之外的路径。
+`factory_fw/` 是产测平台化过程中的临时独立工程根目录，后续平台化稳定后可以整体移出当前仓库。目录内的构建、配置、平台实现不依赖 `factory_fw` 外部源码路径。
 
-## 分层架构
+当前测试平台为 FALCON（RK3576），目标产品固件背景为 FALCON_AIR（RV1126B）。FALCON 现阶段复用部分 FALCON_AIR 的硬件控制思路，后续再按硬件差异替换平台 driver。
 
-```
-┌─────────────────────────────────────────────┐
-│  Application 层                              │
-│  main.cpp — 通用入口，零平台相关代码          │
-└─────────────────────────────────────────────┘
-                      │
-    ┌─────────────────┼─────────────────┐
-    ▼                 ▼                 ▼
-┌──────────┐   ┌──────────┐   ┌──────────────┐
-│  core/   │   │ common/  │   │   config/    │
-│ 测试引擎  │   │ 通用工具  │   │  JSON 配置   │
-│ 异步队列  │   │ 协议常量  │   │              │
-│ 注册中心  │   │ ShellUtils│   │              │
-└──────────┘   └──────────┘   └──────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────┐
-│  平台抽象层                                   │
-│  platforms/common/interface/ — 纯虚接口      │
-│  platforms/<platform>/drivers/ — 平台实现    │
-└─────────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────┐
-│  HAL 通用层                                   │
-│  hal/ — 平台无关的硬件封装（I2C、V4L2 等）   │
-└─────────────────────────────────────────────┘
+## 分层
+
+```text
+factory_fw/
+├── src/
+│   ├── core/                 # 测试引擎、模块注册、异步队列、结果模型
+│   ├── common/               # 通用工具
+│   ├── config/               # platform.json / tests.json 读取
+│   ├── control/              # 通用控制层：I2C、GPIO、V4L2、录制控制等
+│   ├── tests/                # 产测项目实现
+│   ├── ble/                  # BLE / MQTT 桥接（FALCON 启用）
+│   └── platforms/common/     # 平台接口、Base 兜底实现、DriverRegistry 接入
+├── platforms/
+│   ├── base/                 # 本地基础平台，用于 x86 编译和框架回归
+│   └── falcon/               # FALCON / RK3576 平台实现
+└── cmake/platforms/          # 平台 toolchain 文件
 ```
 
-## 双注册机制
+## 关键约定
 
-系统中有两个正交注册表：
-
-| 注册表 | 维度 | 键类型 | 用途 |
-|--------|------|--------|------|
-| `DriverRegistry` | 硬件能力 | `std::type_index` | 平台登记拥有的 driver，测试通过 `TestContext::create<I>()` 获取 |
-| `ModuleRegistry` | 测试方法 | `std::string` | 测试模块通过 `REGISTER_TEST_MODULE` 宏自注册，引擎按 topic 派发 |
-
-## 关键设计决策
-
-1. **IPlatform 只保留 `registerDrivers()`** — 单一真相源，避免 `createXxx()` 与 `registerDrivers()` 漂移
-2. **配置文件放在平台层** — `platforms/<platform>/platform.json` + `tests.json`，各平台自维护
-3. **单 worker 串行** — `AsyncTaskQueue` 单线程，所有测试入队串行执行，硬件访问由架构保证串行
-4. **tests 库用 OBJECT library** — 防止静态库 dead-strip 导致自注册符号被静默丢弃
-5. **异常守卫 `catch(...)`** — worker 线程永不崩溃，任何异常都转为 `TestResult::fail`
+- `src/control` 是通用控制层，不再称为 HAL 通用层；它放平台无关的控制封装，例如 `I2cController`、`GpioController`、`V4l2Recorder`、`RecorderController`。
+- `platforms/common/interface` 定义跨平台 driver 接口；平台真实硬件能力由 `platforms/<platform>/drivers` 实现并注册。
+- `Base*` 是基础兜底实现，替代原来的 `Null*` 命名；基础平台名统一为 `base`。
+- `factory_fw/src/CMakeLists.txt` 是 src 内唯一 CMake 入口，负责 core/common/config/control/tests/platform_common/ble 的目标定义。
+- 平台 CMake 只负责平台 driver、平台链接和最终 `factory_test` 可执行文件。
 
 ## 数据流
 
+```text
+MQTT topic
+  -> TestEngine::onMqttMessage()
+  -> tests.json 查找测试项
+  -> ModuleRegistry 创建测试模块
+  -> TestContext 从 DriverRegistry 获取平台 driver
+  -> 测试模块执行并生成 TestResult
+  -> TestEngine 发布结果
 ```
-MQTT topic "15R" → TestEngine::onMqttMessage()
-                        ↓
-                  查找 tests.json 中对应项
-                        ↓
-                  ModuleRegistry::create("battery")
-                        ↓
-                  BatteryTest::run(TestContext)
-                        ↓
-                  ctx.create<IBatteryDriver>()
-                        ↓
-                  DriverRegistry → Cw221xBatteryDriver (Falcon 平台)
-                        ↓
-                  TestResult::pass() / fail() / skipped()
-                        ↓
-                  publishResult() → MQTT 上报
-```
+
+## 当前阶段
+
+第二阶段已完成平台接口、调度链路、base/falcon 双平台编译验证。第三阶段开始迁移真实 driver、接入 MQTT/BLE，并清理构建和命名边界。

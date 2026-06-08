@@ -2,7 +2,7 @@
 
 namespace ft {
 
-class NullDisplayDriver : public IDisplayDriver {
+class BaseDisplayDriver : public IDisplayDriver {
 public:
     bool init() override { return false; }
     void deinit() override {}

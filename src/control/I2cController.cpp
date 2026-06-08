@@ -1,4 +1,4 @@
-#include "hal/I2cController.h"
+#include "control/I2cController.h"
 #include "common/ShellUtils.h"
 #include <cstdio>
 #include <string>

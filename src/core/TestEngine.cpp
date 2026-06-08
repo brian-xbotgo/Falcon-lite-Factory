@@ -10,7 +10,7 @@
 #include <chrono>
 
 #ifdef HAVE_MOSQUITTO
-#include "mosquitto/mosquitto.h"
+#include <mosquitto.h>
 #endif
 
 namespace ft {

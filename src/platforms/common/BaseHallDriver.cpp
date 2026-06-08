@@ -2,7 +2,7 @@
 
 namespace ft {
 
-class NullHallDriver : public IHallDriver {
+class BaseHallDriver : public IHallDriver {
 public:
     bool init() override { return false; }
     void deinit() override {}

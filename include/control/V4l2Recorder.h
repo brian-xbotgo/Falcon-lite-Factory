@@ -1,8 +1,8 @@
 #pragma once
 #include "platforms/common/interface/IRecorder.h"
-#include "hal/MppEncoder.h"
-#include "hal/Mp4Muxer.h"
-#include "hal/AudioCapture.h"
+#include "control/MppEncoder.h"
+#include "control/Mp4Muxer.h"
+#include "control/AudioCapture.h"
 #include <string>
 #include <vector>
 #include <thread>
@@ -13,7 +13,7 @@
 // V4L2-based recorder — platform-independent video capture via Linux V4L2 API.
 // Supports multiple cameras simultaneously, each in its own thread.
 // Includes ALSA audio capture + G.711A encoding + MP4 muxing for the first camera.
-// No Rockchip-specific dependencies.  Coexists with NullRecorder fallback.
+// No Rockchip-specific dependencies.  Coexists with BaseRecorder fallback.
 
 namespace ft {
 

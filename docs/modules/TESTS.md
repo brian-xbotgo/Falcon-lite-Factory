@@ -98,4 +98,4 @@ TestResult MotorTest::run(TestContext& ctx) {
 - [ ] 文件末尾加 `REGISTER_TEST_MODULE("xxx", XxxTest)`
 - [ ] 在平台 `tests.json` 中注册 topic → module 映射
 - [ ] `CMakeLists.txt` 中 `factory_tests` 的源文件列表追加新 `.cpp`
-- [ ] 编译验证（null 平台可快速验证链接性）
+- [ ] 编译验证（base 平台可快速验证链接性）

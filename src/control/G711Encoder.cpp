@@ -2,7 +2,7 @@
 // Encodes 16-bit signed linear PCM to 8-bit A-law using a precomputed
 // 4096-entry lookup table (12-bit segment quantization).
 
-#include "hal/G711Encoder.h"
+#include "control/G711Encoder.h"
 
 namespace ft {
 

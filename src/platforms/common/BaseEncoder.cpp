@@ -2,7 +2,7 @@
 
 namespace ft {
 
-class NullEncoder : public IEncoder {
+class BaseEncoder : public IEncoder {
 public:
     bool init(const EncoderConfig&) override { return false; }
     void deinit() override {}

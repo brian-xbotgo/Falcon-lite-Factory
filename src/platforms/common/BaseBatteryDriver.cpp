@@ -2,7 +2,7 @@
 
 namespace ft {
 
-class NullBatteryDriver : public IBatteryDriver {
+class BaseBatteryDriver : public IBatteryDriver {
 public:
     bool init() override { return false; }
     BatteryInfo read() override { return {}; }

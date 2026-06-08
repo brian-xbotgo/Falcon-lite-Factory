@@ -6,6 +6,8 @@
 #include <mutex>
 #include <atomic>
 
+struct mosquitto;
+
 namespace ft {
 
 struct TestResult;
@@ -33,7 +35,7 @@ private:
     nlohmann::json testConfigs_;
     std::mutex mqttMutex_;
     std::atomic<bool> running_{true};
-    struct mosquitto* mqttClient_ = nullptr;
+    mosquitto* mqttClient_ = nullptr;
 };
 
 } // namespace ft

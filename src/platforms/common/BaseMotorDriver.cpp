@@ -2,7 +2,7 @@
 
 namespace ft {
 
-class NullMotorDriver : public IMotorDriver {
+class BaseMotorDriver : public IMotorDriver {
 public:
     bool init() override { return false; }
     void deinit() override {}

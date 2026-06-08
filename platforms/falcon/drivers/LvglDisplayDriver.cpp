@@ -1,5 +1,5 @@
 #include "drivers/LvglDisplayDriver.h"
-#include "hal/GpioController.h"
+#include "control/GpioController.h"
 #include "common/ShellUtils.h"
 #include <cstdio>
 #include <cstring>

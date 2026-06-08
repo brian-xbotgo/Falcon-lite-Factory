@@ -1,4 +1,4 @@
-#include "hal/GpioController.h"
+#include "control/GpioController.h"
 #include <cstdio>
 #include <cstring>
 #include <fcntl.h>

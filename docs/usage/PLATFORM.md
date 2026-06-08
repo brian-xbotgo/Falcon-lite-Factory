@@ -1,85 +1,51 @@
 # 平台配置说明
 
-## 平台目录结构
+## 平台目录
 
-每个平台一个目录，自包含：
+每个平台一个目录：
 
-```
-platforms/<platform_name>/
-├── CMakeLists.txt          # 平台编译配置
-├── build_factory.sh        # 平台打包脚本
-├── platform.json           # 硬件资源配置
-├── tests.json              # 测试项注册表
-└── drivers/                # 平台专用 driver 实现
-    ├── *.cpp
-    └── *.h
+```text
+platforms/<platform>/
+├── CMakeLists.txt
+├── build_factory.sh
+├── platform.json
+├── tests.json
+└── drivers/
 ```
 
-## 新增一个平台
+`base` 平台没有专用 driver，使用 `src/platforms/common/Base*.cpp` 中的兜底实现。`falcon` 平台在 `platforms/falcon/drivers/` 中提供真实硬件 driver。
 
-以 `rk3588` 为例：
+## platform.json
 
-### 1. 创建目录
-
-```bash
-mkdir -p platforms/rk3588/drivers
-```
-
-### 2. 编写 CMakeLists.txt
-
-参考 `platforms/null/CMakeLists.txt` 或 `platforms/falcon/CMakeLists.txt`。
-
-关键约定：
-- `if(NOT DEFINED FW_ROOT)` 回退到 `../..`
-- `if(NOT TARGET factory_core)` 守卫避免重复 add
-- 显式列出 `drivers/*.cpp` 源文件（不用 `file(GLOB)`）
-
-### 3. 实现平台类
-
-```cpp
-// platforms/rk3588/Rk3588Platform.cpp
-#include "platforms/common/interface/IPlatform.h"
-
-class Rk3588Platform : public IPlatform {
-public:
-    bool init(const nlohmann::json& config) override { /* ... */ }
-    const char* name() const override { return "rk3588"; }
-    void registerDrivers(DriverRegistry& reg) override {
-        reg.bind<IEncoder>([]{ return std::make_unique<RkMppEncoderV2>(); });
-        // ... 绑定平台拥有的 driver
-    }
-};
-```
-
-### 4. 编写 platform.json
+`platform.json` 描述硬件资源和平台名：
 
 ```json
 {
-  "platform": "rk3588",
-  "gpio": { "led": { "white": 120 } },
-  "i2c": { "cam0": { "bus": 4, "addr": "0x1a" } }
+  "platform": "falcon",
+  "gpio": {
+    "led": { "white": 170, "red": 169 }
+  },
+  "i2c": {
+    "cam0": { "bus": 3, "addr": "0x29" }
+  }
 }
 ```
 
-### 5. 编写工具链文件
+平台名必须和平台注册名一致，例如 `base`、`falcon`。
 
-```cmake
-# cmake/platforms/rk3588.cmake
-set(CMAKE_SYSTEM_NAME Linux)
-set(CMAKE_SYSTEM_PROCESSOR aarch64)
-set(CMAKE_SYSROOT ".../sysroot")
-set(CMAKE_C_COMPILER ".../aarch64-linux-gnu-gcc")
-# ...
-```
+## 新增平台
 
-### 6. 编译验证
+1. 复制 `platforms/base` 或参考 `platforms/falcon` 新建平台目录。
+2. 编写 `<Platform>Platform.cpp`，实现 `IPlatform::registerDrivers()`。
+3. 明确列出平台 driver 源文件，不使用 `file(GLOB)`。
+4. 新增 `cmake/platforms/<platform>.cmake`。
+5. 执行 `PLATFORM=<platform> ./build.sh`。
 
-```bash
-PLATFORM=rk3588 ./build.sh
-```
+## CMake 约定
 
-## 平台命名约定
+平台 CMake 只做平台相关内容：
 
-- 平台名 = 产品平台代号（如 `falcon`），不是芯片型号
-- 同一平台可服务多个产品（功能不同但硬件相同）
-- 芯片型号体现在 driver 实现文件名中（如 `RkMppEncoder.cpp`）
+- 设置 `FW_ROOT` fallback。
+- 通过 `add_subdirectory(${FW_ROOT}/src ...)` 引入统一 src CMake。
+- 定义平台 driver library。
+- 链接 `factory_core`、`factory_common`、`factory_config`、`factory_control`、`factory_tests` 等目标。

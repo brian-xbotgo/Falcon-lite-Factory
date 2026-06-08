@@ -4,11 +4,11 @@
 // Audio: captures from ALSA via arecord pipe, encodes to G.711A,
 // and muxes with H.264 into an MP4 container.
 
-#include "hal/V4l2Recorder.h"
+#include "control/V4l2Recorder.h"
 #include "platforms/common/interface/IRecorder.h"
-#include "hal/Mp4Muxer.h"
-#include "hal/AudioCapture.h"
-#include "hal/G711Encoder.h"
+#include "control/Mp4Muxer.h"
+#include "control/AudioCapture.h"
+#include "control/G711Encoder.h"
 
 #include <sys/ioctl.h>
 #include <sys/mman.h>

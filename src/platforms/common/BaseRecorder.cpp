@@ -2,7 +2,7 @@
 
 namespace ft {
 
-class NullRecorder : public IRecorder {
+class BaseRecorder : public IRecorder {
 public:
     bool start(const RecorderCmd&) override { return false; }
     bool stop() override { return false; }

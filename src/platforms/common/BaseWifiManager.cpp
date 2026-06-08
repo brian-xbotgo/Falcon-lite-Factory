@@ -2,7 +2,7 @@
 
 namespace ft {
 
-class NullWifiManager : public IWifiManager {
+class BaseWifiManager : public IWifiManager {
 public:
     std::string getStaIp(const char*) override { return ""; }
     int getStaCount(const char*) override { return 0; }

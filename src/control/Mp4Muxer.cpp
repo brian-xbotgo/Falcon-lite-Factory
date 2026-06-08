@@ -2,7 +2,7 @@
 // Boxes are constructed in a scratch buffer and flushed to file.
 // Sample data is written directly to the mdat region.
 
-#include "hal/Mp4Muxer.h"
+#include "control/Mp4Muxer.h"
 #include <cstdio>
 #include <cstring>
 #include <cerrno>

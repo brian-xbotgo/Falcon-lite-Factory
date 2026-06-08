@@ -2,7 +2,7 @@
 
 namespace ft {
 
-class NullCameraDriver : public ICameraDriver {
+class BaseCameraDriver : public ICameraDriver {
 public:
     CameraProbeResult probe(int) override { return {}; }
     bool checkOtp(int) override { return false; }

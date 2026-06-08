@@ -2,7 +2,7 @@
 // Uses arecord in raw PCM mode (S16_LE, configurable rate/channels).
 // Avoids linking against libasound; relies on system arecord.
 
-#include "hal/AudioCapture.h"
+#include "control/AudioCapture.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>

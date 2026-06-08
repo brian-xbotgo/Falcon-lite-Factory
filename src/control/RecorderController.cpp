@@ -1,4 +1,4 @@
-#include "hal/RecorderController.h"
+#include "control/RecorderController.h"
 
 namespace ft {
 

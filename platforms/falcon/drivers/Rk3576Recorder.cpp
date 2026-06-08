@@ -1,5 +1,5 @@
 #include "drivers/Rk3576Recorder.h"
-#include "hal/V4l2Recorder.h"
+#include "control/V4l2Recorder.h"
 
 namespace ft {
 
