@@ -22,6 +22,7 @@
     "hall": {
       "driver": "ads1110",
       "bus": 3,
+      "bus_candidates": [3, 2, 0, 1, 4, 5, 6, 7, 8, 9],
       "addr": "0x48",
       "sample_count": 120,
       "sample_interval_ms": 50,

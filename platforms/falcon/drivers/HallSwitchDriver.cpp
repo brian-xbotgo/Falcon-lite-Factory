@@ -10,6 +10,7 @@
 #include <string>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <vector>
 
 namespace ft {
 
@@ -75,6 +76,17 @@ HallSwitchDriver::Config HallSwitchDriver::parseConfig(const nlohmann::json& roo
         if (hall.contains("bus")) {
             cfg.bus = parseIntValue(hall.at("bus"), cfg.bus);
         }
+        if (hall.contains("bus_candidates") && hall.at("bus_candidates").is_array()) {
+            cfg.busCandidates.clear();
+            for (const auto& item : hall.at("bus_candidates")) {
+                const int bus = parseIntValue(item, -1);
+                if (bus >= 0 &&
+                    std::find(cfg.busCandidates.begin(), cfg.busCandidates.end(), bus) ==
+                        cfg.busCandidates.end()) {
+                    cfg.busCandidates.push_back(bus);
+                }
+            }
+        }
         if (hall.contains("addr")) {
             cfg.addr = parseIntValue(hall.at("addr"), cfg.addr);
         }
@@ -96,12 +108,20 @@ HallSwitchDriver::Config HallSwitchDriver::parseConfig(const nlohmann::json& roo
 
     cfg.sampleCount = std::max(1, cfg.sampleCount);
     cfg.sampleIntervalMs = std::max(0, cfg.sampleIntervalMs);
+    if (cfg.bus >= 0 &&
+        std::find(cfg.busCandidates.begin(), cfg.busCandidates.end(), cfg.bus) ==
+            cfg.busCandidates.end()) {
+        cfg.busCandidates.insert(cfg.busCandidates.begin(), cfg.bus);
+    }
+    if (cfg.busCandidates.empty()) {
+        cfg.busCandidates.push_back(cfg.bus);
+    }
     return cfg;
 }
 
-std::string HallSwitchDriver::busPath() const
+std::string HallSwitchDriver::busPath(int bus)
 {
-    return "/dev/i2c-" + std::to_string(config_.bus);
+    return "/dev/i2c-" + std::to_string(bus);
 }
 
 bool HallSwitchDriver::init()
@@ -123,7 +143,27 @@ bool HallSwitchDriver::init()
 
 bool HallSwitchDriver::initAds1110()
 {
-    const auto path = busPath();
+    std::vector<int> candidates = config_.busCandidates;
+    if (config_.bus >= 0 &&
+        std::find(candidates.begin(), candidates.end(), config_.bus) == candidates.end()) {
+        candidates.insert(candidates.begin(), config_.bus);
+    }
+
+    for (int bus : candidates) {
+        if (initAds1110OnBus(bus)) {
+            return true;
+        }
+    }
+
+    std::fprintf(stderr,
+                 "[HallSwitch] ADS1110 init failed addr=0x%02x candidates=%zu\n",
+                 config_.addr, candidates.size());
+    return false;
+}
+
+bool HallSwitchDriver::initAds1110OnBus(int bus)
+{
+    const auto path = busPath(bus);
     int fd = ::open(path.c_str(), O_RDWR);
     if (fd < 0) {
         std::fprintf(stderr, "[HallSwitch] open %s failed: %s\n",
@@ -155,13 +195,14 @@ bool HallSwitchDriver::initAds1110()
     if (retry >= 3) {
         std::fprintf(stderr,
                      "[HallSwitch] ADS1110 config failed bus=%d addr=0x%02x config=0x%02x err=%s\n",
-                     config_.bus, config_.addr, config, std::strerror(errno));
+                     bus, config_.addr, config, std::strerror(errno));
         ::close(fd);
         return false;
     }
 
     ::usleep(200000);
     fd_ = fd;
+    config_.bus = bus;
     initialized_ = true;
     std::fprintf(stderr,
                  "[HallSwitch] initialized driver=ADS1110 bus=%d addr=0x%02x config=0x%02x sample_count=%d interval_ms=%d min=%.3fV max=%.3fV\n",

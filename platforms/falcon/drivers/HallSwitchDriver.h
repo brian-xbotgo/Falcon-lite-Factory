@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <vector>
 
 namespace ft {
 
@@ -20,6 +21,7 @@ private:
     struct Config {
         std::string driver = "ads1110";
         int bus = 3;
+        std::vector<int> busCandidates = {3, 2, 0, 1, 4, 5, 6, 7, 8, 9};
         int addr = 0x48;
         int sampleCount = 120;
         int sampleIntervalMs = 50;
@@ -28,8 +30,9 @@ private:
     };
 
     bool initAds1110();
+    bool initAds1110OnBus(int bus);
     bool readAds1110(float& value);
-    std::string busPath() const;
+    static std::string busPath(int bus);
     static int parseIntValue(const nlohmann::json& value, int fallback);
     static float parseFloatValue(const nlohmann::json& value, float fallback);
     static Config parseConfig(const nlohmann::json& root);
