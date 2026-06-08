@@ -3,7 +3,7 @@
 #include "platforms/common/SysfsGpioDriver.h"
 #include "drivers/RkMppEncoder.h"
 #include "drivers/Gc4663CameraDriver.h"
-#include "drivers/Cw221xBatteryDriver.h"
+#include "drivers/Om70x0xBatteryDriver.h"
 #include "drivers/Tmi8152MotorDriver.h"
 #include "drivers/HallSwitchDriver.h"
 #include "drivers/LvglDisplayDriver.h"
@@ -33,7 +33,7 @@ private:
 void FalconPlatform::registerDrivers(DriverRegistry& reg) {
     reg.bind<IEncoder>      ([] { return std::make_unique<RkMppEncoder>(); });
     reg.bind<ICameraDriver> ([] { return std::make_unique<Gc4663CameraDriver>(); });
-    reg.bind<IBatteryDriver>([] { return std::make_unique<Cw221xBatteryDriver>(); });
+    reg.bind<IBatteryDriver>([] { return std::make_unique<Om70x0xBatteryDriver>(); });
     reg.bind<IMotorDriver>  ([] { return std::make_unique<Tmi8152MotorDriver>(); });
     reg.bind<IHallDriver>   ([] { return std::make_unique<HallSwitchDriver>(); });
     reg.bind<IDisplayDriver>([] { return std::make_unique<LvglDisplayDriver>(); });

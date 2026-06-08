@@ -416,7 +416,7 @@ file build/falcon/factory_test
 | 5 | Tmi8152MotorDriver 鐪熷疄閫昏緫杩佺Щ | 鉁?| `platforms/falcon/drivers/Tmi8152MotorDriver.cpp` |
 | 6 | Rk3576WifiManager 鐪熷疄閫昏緫杩佺Щ | 鉁?| `platforms/falcon/drivers/Rk3576WifiManager.cpp` |
 | 7 | Gc4663CameraDriver 楠ㄦ灦杩佺Щ | 鉁?| `platforms/falcon/drivers/Gc4663CameraDriver.cpp` |
-| 8 | Cw221xBatteryDriver 楠ㄦ灦杩佺Щ | 鉁?| `platforms/falcon/drivers/Cw221xBatteryDriver.cpp` |
+| 8 | Om70x0xBatteryDriver 楠ㄦ灦杩佺Щ | 鉁?| `platforms/falcon/drivers/Om70x0xBatteryDriver.cpp` |
 | 9 | RkMppEncoder 瀹屾暣鐢熶骇绾ц縼绉?| 鉁?| `platforms/falcon/drivers/RkMppEncoder.cpp` |
 | 10 | MQTT 闆嗘垚 鈥?TestEngine 鎺ュ叆 mosquitto loop | 鉁?| `src/core/TestEngine.cpp` |
 | 11 | I2cController 鎵╁睍锛坮eadRegister / writeRegister锛?| 鉁?| `src/control/I2cController.cpp` |
@@ -481,7 +481,7 @@ cd /tmp/fw_iso && PLATFORM=base ./build.sh
 ### 3.5 绗﹀彿瀛樻椿楠岃瘉
 
 ```bash
-nm build/falcon/factory_test | grep -E 'HallSwitchDriver|Tmi8152MotorDriver|Rk3576WifiManager|RkMppEncoder|Gc4663CameraDriver|Cw221xBatteryDriver'
+nm build/falcon/factory_test | grep -E 'HallSwitchDriver|Tmi8152MotorDriver|Rk3576WifiManager|RkMppEncoder|Gc4663CameraDriver|Om70x0xBatteryDriver'
 # 鍏ㄩ儴绗﹀彿瀛樺湪锛圱/W 鏍囧織锛夛紝骞冲彴娉ㄥ唽娲荤潃
 ```
 

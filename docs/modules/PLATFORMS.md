@@ -21,7 +21,7 @@ platforms/
     └── drivers/
         ├── RkMppEncoder.*
         ├── Gc4663CameraDriver.*
-        ├── Cw221xBatteryDriver.*
+        ├── Om70x0xBatteryDriver.*
         ├── Tmi8152MotorDriver.*
         ├── HallSwitchDriver.*
         ├── LvglDisplayDriver.*

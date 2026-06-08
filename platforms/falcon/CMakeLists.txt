@@ -16,7 +16,7 @@ set(FALCON_DRIVER_SRCS
     FalconPlatform.cpp
     drivers/RkMppEncoder.cpp
     drivers/Gc4663CameraDriver.cpp
-    drivers/Cw221xBatteryDriver.cpp
+    drivers/Om70x0xBatteryDriver.cpp
     drivers/Tmi8152MotorDriver.cpp
     drivers/HallSwitchDriver.cpp
     drivers/LvglDisplayDriver.cpp

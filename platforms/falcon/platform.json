@@ -3,10 +3,8 @@
   "version": 1,
   "gpio": {
     "led": {
-      "white": 170,
-      "red": 169,
-      "status_a": 144,
-      "status_b": 89
+      "white": 89,
+      "red": 144
     },
     "buzzer": 93,
     "backlight": 92,
@@ -19,14 +17,14 @@
   "i2c": {
     "cam0": { "bus": 3, "addr": "0x29", "otp": "/proc/otp_eeprom-3-50" },
     "cam1": { "bus": 4, "addr": "0x29", "otp": "/proc/otp_eeprom-4-50" },
-    "charger": { "bus": 2, "addr": "0x6a", "probe_reg": "0x14", "probe_mask": "0x38", "probe_expect": 4 },
-    "fuel_gauge": { "bus": 5, "addr": "0x64", "probe_reg": "0x00", "probe_expect": "0xa0" }
+    "charger": { "bus": 6, "addr": "0x75", "probe_reg": "0x01", "probe_expect_any": ["0x00", "0x01"] },
+    "fuel_gauge": { "bus": 6, "addr": "0x38", "probe_reg": "0x00", "probe_expect": "0xb1" }
   },
   "battery": {
-    "driver": "cw221x",
-    "sysfs_path": "/sys/class/power_supply/cw221X-bat/uevent",
-    "model_path": "/sys/class/power_supply/cw221X-bat/model_name",
-    "dev_node": "/dev/cw221X-bat"
+    "driver": "om70x0x",
+    "sysfs_path": "/sys/class/power_supply/om70X0X-bat/uevent",
+    "model_path": "/sys/class/power_supply/om70X0X-bat/model_name",
+    "dev_node": "/dev/om70X0X-bat"
   },
   "motor": {
     "driver": "tmi8152",
@@ -47,11 +45,14 @@
   },
   "audio": {
     "mic_card": 1,
-    "mic_device": "hw:1,0",
+    "mic_device": "hw:0,0",
+    "record_path": "/userdata/prod/test.wav",
+    "record_seconds": 5,
     "sample_rate": 48000,
     "format": "S32_LE",
     "channels": 2,
-    "pdm_gain_control": "PDM0 Gain Volume 0"
+    "pdm_gain_control": "PDM1 Gain",
+    "gain_percent": 100
   },
   "video": {
     "encoder": "rockchip_mpp",
@@ -60,6 +61,10 @@
   "storage": {
     "tf_partition": "/dev/mmcblk1p1",
     "tf_mount_point": "/mnt/sdcard",
+    "tf_speed_test_file": "/mnt/sdcard/factory_tf_speed_test.bin",
+    "tf_speed_test_mb": 64,
+    "tf_min_write_speed_mb_s": 10,
+    "tf_min_read_speed_mb_s": 10,
     "prod_dir": "/userdata/prod"
   },
   "paths": {
@@ -75,11 +80,10 @@
   },
   "input": {
     "key_devices": [
-      { "path": "/dev/input/event0", "name": "adc-m-keys", "keys": ["F15","F16","F17"] },
-      { "path": "/dev/input/event1", "name": "adc-ab-keys", "keys": ["F13","F14"] },
-      { "path": "/dev/input/event2", "name": "gpio-keys", "keys": ["power"] }
+      { "path": "/dev/input/event0", "name": "rk805 pwrkey", "keys": ["KEY_POWER"] },
+      { "path": "/dev/input/event2", "name": "adc-keys", "keys": ["KEY_F13","KEY_F14","KEY_F15","KEY_F16","KEY_F17"] }
     ],
-    "key_codes": ["0x290", "KEY_F13", "KEY_F14", "KEY_F15", "KEY_F16", "KEY_F17"]
+    "key_codes": ["KEY_POWER", "KEY_F13", "KEY_F14", "KEY_F15", "KEY_F16", "KEY_F17"]
   },
   "soc_test": {
     "gpu": {

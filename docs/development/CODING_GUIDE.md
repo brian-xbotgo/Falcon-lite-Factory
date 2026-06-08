@@ -5,7 +5,7 @@
 | 类型 | 命名 | 示例 |
 |------|------|------|
 | 接口类 | `I` + PascalCase | `ICameraDriver`, `IBatteryDriver` |
-| 实现类 | PascalCase | `Gc4663CameraDriver`, `Cw221xBatteryDriver` |
+| 实现类 | PascalCase | `Gc4663CameraDriver`, `Om70x0xBatteryDriver` |
 | 函数/方法 | camelCase | `probe()`, `readChipId()` |
 | 成员变量 | snake_case + 尾下划线 | `drivers_`, `config_` |
 | 局部变量 | snake_case | `cam_index`, `test_cfg` |
