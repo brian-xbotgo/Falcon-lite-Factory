@@ -35,16 +35,16 @@ std::string answerTopicFor(const std::string& requestTopic)
 
 uint32_t errorCodeFromResult(const TestResult& result)
 {
-    if (result.status == TestResult::Status::Pass) {
-        return 0;
-    }
-
     try {
         if (result.data.is_object() && result.data.contains("error_code")) {
             return result.data.at("error_code").get<uint32_t>();
         }
     } catch (...) {
         // Fall through to the protocol-level generic failure bit.
+    }
+
+    if (result.status == TestResult::Status::Pass) {
+        return 0;
     }
 
     return 1;
@@ -212,13 +212,16 @@ bool TestEngine::connectMqtt()
                      mosquitto_strerror(rc));
         return false;
     }
+    std::fprintf(stderr, "[TestEngine] MQTT connected %s:%d\n", host.c_str(), port);
 
     // Subscribe all topics from tests.json
     if (testConfigs_.contains("tests") && testConfigs_["tests"].is_array()) {
         for (auto& t : testConfigs_["tests"]) {
             if (t.contains("topic")) {
                 std::string topic = t["topic"].get<std::string>();
-                mosquitto_subscribe(mqttClient_, nullptr, topic.c_str(), 2);
+                rc = mosquitto_subscribe(mqttClient_, nullptr, topic.c_str(), 2);
+                std::fprintf(stderr, "[TestEngine] subscribe %s qos=2 rc=%d\n",
+                             topic.c_str(), rc);
             }
         }
     }
@@ -236,7 +239,11 @@ void TestEngine::run()
         if (rc != MOSQ_ERR_SUCCESS) {
             std::fprintf(stderr, "[TestEngine] mosquitto_loop_start failed: %s\n",
                          mosquitto_strerror(rc));
+        } else {
+            std::fprintf(stderr, "[TestEngine] mosquitto loop started\n");
         }
+    } else {
+        std::fprintf(stderr, "[TestEngine] MQTT disabled or connect failed\n");
     }
 #endif
     while (running_) {
@@ -257,6 +264,10 @@ void TestEngine::stop()
 
 void TestEngine::onMqttMessage(const std::string& topic, const std::string& payload)
 {
+    std::fprintf(stderr, "[TestEngine] received topic=%s payload_len=%zu\n",
+                 topic.c_str(), payload.size());
+    std::fflush(stderr);
+
     // 永远走 asyncQueue：mosquitto 回调线程只做"入队"，不阻塞，
     // 避免 sync 测试卡住 MQTT 网络 I/O 导致 keepalive 超时。
     asyncQueue_.enqueue([this, topic, payload]() {
@@ -292,6 +303,11 @@ void TestEngine::onMqttMessage(const std::string& topic, const std::string& payl
 void TestEngine::dispatch(const std::string& topic, const nlohmann::json& testCfg,
                           const std::string& requestPayload)
 {
+    std::fprintf(stderr, "[TestEngine] dispatch topic=%s module=%s async=%d\n",
+                 topic.c_str(),
+                 testCfg.value("module", std::string("<missing>")).c_str(),
+                 testCfg.value("async", false) ? 1 : 0);
+
     std::unique_ptr<ITestModule> mod;
     try {
         mod = ModuleRegistry::instance().create(
@@ -308,8 +324,19 @@ void TestEngine::dispatch(const std::string& topic, const nlohmann::json& testCf
         return;
     }
 
-    TestContext ctx(drivers_, config_,
-                    testCfg.value("params", nlohmann::json::object()));
+    auto params = testCfg.value("params", nlohmann::json::object());
+    if (!params.is_object()) {
+        params = nlohmann::json::object();
+    }
+    params["topic"] = topic;
+
+    TestContext ctx(
+        drivers_,
+        config_,
+        std::move(params),
+        [this, topic, requestPayload](const TestResult& progress) {
+            publishResult(topic, progress, requestPayload);
+        });
 
     auto modShared = std::shared_ptr<ITestModule>(std::move(mod));
     auto task = [modShared, ctx = std::move(ctx),
@@ -338,14 +365,21 @@ void TestEngine::publishResult(const std::string& topic, const TestResult& resul
                                const std::string& requestPayload)
 {
     std::lock_guard<std::mutex> lock(mqttMutex_);
+    const bool isProgress = result.data.is_object() &&
+                            result.data.value("progress", false);
     const char* statusStr = "UNKNOWN";
     switch (result.status) {
         case TestResult::Status::Pass:    statusStr = "PASS"; break;
         case TestResult::Status::Fail:    statusStr = "FAIL"; break;
         case TestResult::Status::Skipped: statusStr = "SKIP"; break;
     }
-    fprintf(stdout, "[Result] topic=%s status=%s detail=%s\n",
-            topic.c_str(), statusStr, result.detail.c_str());
+    if (isProgress) {
+        fprintf(stdout, "[Progress] topic=%s detail=%s\n",
+                topic.c_str(), result.detail.c_str());
+    } else {
+        fprintf(stdout, "[Result] topic=%s status=%s detail=%s\n",
+                topic.c_str(), statusStr, result.detail.c_str());
+    }
     fflush(stdout);
 
 #ifdef HAVE_MOSQUITTO
@@ -354,9 +388,16 @@ void TestEngine::publishResult(const std::string& topic, const TestResult& resul
             const auto errorCode = errorCodeFromResult(result);
             const auto answerTopic = answerTopicFor(topic);
             const auto payload = protocolResponsePayload(requestPayload, errorCode);
-            mosquitto_publish(mqttClient_, nullptr, answerTopic.c_str(),
-                              static_cast<int>(payload.size()),
-                              payload.data(), 2, false);
+            const int rc = mosquitto_publish(mqttClient_, nullptr, answerTopic.c_str(),
+                                             static_cast<int>(payload.size()),
+                                             payload.data(), 2, false);
+            if (rc != MOSQ_ERR_SUCCESS) {
+                std::fprintf(stderr, "[TestEngine] publish %s failed: %s\n",
+                             answerTopic.c_str(), mosquitto_strerror(rc));
+            } else {
+                std::fprintf(stderr, "[TestEngine] publish %s payload_len=%zu error_code=%u\n",
+                             answerTopic.c_str(), payload.size(), errorCode);
+            }
         } catch (...) {
             // Protocol serialization failure, ignore.
         }
