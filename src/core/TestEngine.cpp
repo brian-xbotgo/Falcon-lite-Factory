@@ -76,6 +76,24 @@ std::string trimProtocolText(std::string value)
     return value;
 }
 
+bool isValidProtocolSn(const std::string& sn)
+{
+    if (sn.size() != 14) {
+        return false;
+    }
+
+    bool hasNonZero = false;
+    for (unsigned char ch : sn) {
+        if (!std::isalnum(ch)) {
+            return false;
+        }
+        if (ch != '0') {
+            hasNonZero = true;
+        }
+    }
+    return hasNonZero;
+}
+
 void persistSnFromPayload(const std::string& requestPayload)
 {
     if (requestPayload.size() < kRequestPayloadSize) {
@@ -83,7 +101,7 @@ void persistSnFromPayload(const std::string& requestPayload)
     }
 
     const auto sn = trimProtocolText(requestPayload.substr(0, 14));
-    if (sn.empty()) {
+    if (!isValidProtocolSn(sn)) {
         return;
     }
 

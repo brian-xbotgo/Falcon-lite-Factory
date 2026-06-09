@@ -116,9 +116,9 @@ int BleAdvertiser::run()
     LOG("BLE name: %s\n", bleName);
     if (!m_factoryMode) m_deviceInfo.loadDeviceAlias();
 
-    // 2. Init MQTT. Factory firmware must advertise even before the station
-    // sends SN, so SN is picked up asynchronously and reflected in ADV later.
-    if (m_mqtt.init(m_factoryMode, false) != 0) {
+    // 2. Init MQTT. In factory mode the tester sends a 14-byte SN first; only
+    // then do we register the BLE advertisement so scanners see valid SN data.
+    if (m_mqtt.init(m_factoryMode, true) != 0) {
         LOG("MQTT init failed\n");
         return -1;
     }
@@ -330,7 +330,8 @@ gboolean BleAdvertiser::onUpdateManufacturerData(gpointer ud)
 
     if (self->m_factoryMode) {
         // Compare SN against cache, skip PropertiesChanged if unchanged
-        const uint8_t* sn = self->m_mqtt.getSnBuf();
+        uint8_t sn[SN_LEN] = {};
+        self->m_mqtt.getSn(sn);
         if (memcmp(sn, self->m_cacheSn, SN_LEN) == 0) return G_SOURCE_CONTINUE;
         memcpy(self->m_cacheSn, sn, SN_LEN);
         changed = true;
@@ -383,6 +384,12 @@ gboolean BleAdvertiser::onUpdateManufacturerData(gpointer ud)
         "org.freedesktop.DBus.Properties", "PropertiesChanged",
         g_variant_new("(s@a{sv}@as)", "org.bluez.LEAdvertisement1",
                       g_variant_builder_end(&props), invalidated), nullptr);
+
+    if (self->m_factoryMode && changed) {
+        self->stopAdvertisement();
+        self->startAdvertisement();
+        LOG("Factory SN changed, BLE advertisement refreshed\n");
+    }
 
     return G_SOURCE_CONTINUE;
 }

@@ -2,15 +2,31 @@
 #include "ble/BleConstants.h"
 #include "mqtt_def.h"
 #include <mosquitto.h>
+#include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
-#include <unistd.h>
+#include <fstream>
+#include <string>
+#include <sys/stat.h>
 
 #define LOG(fmt, ...) std::fprintf(stderr, "[ble_wifi] " fmt, ##__VA_ARGS__)
 
 namespace ft {
 
-// Static callbacks — forward to instance via userdata
+namespace {
+
+constexpr int kVersionInfoSnPcbaOffset = 4 + 16;
+constexpr int kVersionInfoMinLen = kVersionInfoSnPcbaOffset + SN_LEN;
+
+std::string snToString(const uint8_t* sn)
+{
+    return std::string(reinterpret_cast<const char*>(sn),
+                       reinterpret_cast<const char*>(sn) + SN_LEN);
+}
+
+} // namespace
+
 static void mqtt_msg_cb(mosquitto*, void* ud, const mosquitto_message* msg)
 {
     if (ud) static_cast<BleMqttBridge*>(ud)->onMessage(msg);
@@ -53,11 +69,12 @@ int BleMqttBridge::init(bool factoryMode, bool waitForSn)
         return -1;
     }
 
-    // In factory mode, block until SN is received
     if (m_factoryMode && waitForSn) {
+        loadSnFromFile();
+        std::unique_lock<std::mutex> lock(m_snMutex);
         while (!m_snValid) {
-            LOG("Waiting for SN via MQTT...\n");
-            sleep(1);
+            LOG("Waiting for 14-byte SN via MQTT topic AZA/sn_pcba before BLE advertising...\n");
+            m_snCv.wait_for(lock, std::chrono::seconds(1));
         }
     }
 
@@ -77,31 +94,23 @@ void BleMqttBridge::onMessage(const mosquitto_message* msg)
 {
     if (!msg || !msg->payload) return;
 
-    const char* payload = (const char*)msg->payload;
-    int payloadlen = msg->payloadlen;
+    const auto* payload = static_cast<const uint8_t*>(msg->payload);
+    const int payloadLen = msg->payloadlen;
 
-    // Extract SN from any test command payload: first 14 bytes
-    // e.g. topic="17R", payload="11111111111111f648909b-af47-4419e0abfd" → SN="11111111111111"
     if (m_factoryMode) {
-        if (payloadlen >= SN_LEN) {
-            memcpy(m_sn, payload, SN_LEN);
-            m_snValid = true;
-            LOG("Got SN from [%s]: %.*s\n", msg->topic, SN_LEN, m_sn);
-        }
+        extractSnFromMessage(msg->topic, payload, payloadLen);
     }
 
-    // Handle live status notification
-    if (strcmp(msg->topic, MQTT_TOPIC_LIVE_NOTIFY) == 0) {
-        unsigned char status = *(unsigned char*)msg->payload;
+    if (std::strcmp(msg->topic, MQTT_TOPIC_LIVE_NOTIFY) == 0) {
+        unsigned char status = *static_cast<unsigned char*>(msg->payload);
         if (status > 1) status = 1;
         setLiveStatus(status);
         return;
     }
 
-    // Handle phone connect status
-    if (strcmp(msg->topic, MQTT_TOPIC_PHONE_CONNECT_STATUS) == 0) {
+    if (std::strcmp(msg->topic, MQTT_TOPIC_PHONE_CONNECT_STATUS) == 0) {
         if (msg->payloadlen >= 1 && m_phoneConnectHandler) {
-            unsigned char connected = *(unsigned char*)msg->payload;
+            unsigned char connected = *static_cast<unsigned char*>(msg->payload);
             m_phoneConnectHandler(connected == 1);
         }
         return;
@@ -110,13 +119,16 @@ void BleMqttBridge::onMessage(const mosquitto_message* msg)
 
 void BleMqttBridge::onConnect(int rc)
 {
-    if (rc) { LOG("MQTT connect error %d\n", rc); return; }
+    if (rc) {
+        LOG("MQTT connect error %d\n", rc);
+        return;
+    }
 
     mosquitto_subscribe(m_mosq, nullptr, MQTT_TOPIC_LIVE_NOTIFY, MQTT_QOS);
     mosquitto_subscribe(m_mosq, nullptr, MQTT_TOPIC_PHONE_CONNECT_STATUS, MQTT_QOS);
 
     if (m_factoryMode) {
-        // Subscribe to all topics — SN arrives with any test command
+        mosquitto_subscribe(m_mosq, nullptr, MQTT_TOPIC_VERSION_RESP, MQTT_QOS);
         mosquitto_subscribe(m_mosq, nullptr, "#", MQTT_QOS);
     }
 
@@ -160,7 +172,126 @@ int BleMqttBridge::publishAppToken(const char* token)
 
 void BleMqttBridge::getSn(uint8_t* buf)
 {
-    if (buf) memcpy(buf, m_sn, SN_LEN);
+    if (!buf) return;
+    std::lock_guard<std::mutex> lock(m_snMutex);
+    memcpy(buf, m_sn, SN_LEN);
+}
+
+bool BleMqttBridge::hasValidSn() const
+{
+    std::lock_guard<std::mutex> lock(m_snMutex);
+    return m_snValid;
+}
+
+bool BleMqttBridge::extractSnFromMessage(const char* topic, const uint8_t* payload,
+                                         int payloadLen)
+{
+    if (!topic || !payload || payloadLen < SN_LEN) {
+        return false;
+    }
+
+    if (std::strcmp(topic, MQTT_TOPIC_VERSION_RESP) == 0 &&
+        payloadLen >= kVersionInfoMinLen &&
+        updateSn(payload + kVersionInfoSnPcbaOffset, MQTT_TOPIC_VERSION_RESP)) {
+        return true;
+    }
+
+    if (std::strcmp(topic, MQTT_TOPIC_VERSION_RESP) == 0) {
+        LOG("Ignore AZA payload_len=%d, expected at least %d bytes for version_info.sn_pcba\n",
+            payloadLen, kVersionInfoMinLen);
+        return false;
+    }
+
+    return updateSn(payload, topic);
+}
+
+bool BleMqttBridge::updateSn(const uint8_t* sn, const char* source)
+{
+    if (!isValidSn(sn)) {
+        return false;
+    }
+
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> lock(m_snMutex);
+        changed = !m_snValid || std::memcmp(m_sn, sn, SN_LEN) != 0;
+        if (!changed) {
+            return true;
+        }
+        std::memcpy(m_sn, sn, SN_LEN);
+        m_snValid = true;
+    }
+
+    persistSn(sn);
+    m_snCv.notify_all();
+    const auto text = snToString(sn);
+    LOG("Got 14-byte SN from [%s]: %s\n", source ? source : "<unknown>", text.c_str());
+    return true;
+}
+
+bool BleMqttBridge::isValidSn(const uint8_t* sn)
+{
+    if (!sn) {
+        return false;
+    }
+
+    bool hasNonZero = false;
+    for (int i = 0; i < SN_LEN; ++i) {
+        const auto ch = sn[i];
+        if (ch == 0 || ch == 0xff || !std::isalnum(ch)) {
+            return false;
+        }
+        if (ch != '0') {
+            hasNonZero = true;
+        }
+    }
+    return hasNonZero;
+}
+
+void BleMqttBridge::persistSn(const uint8_t* sn)
+{
+    if (!sn) {
+        return;
+    }
+
+    mkdir("/device_data", 0755);
+    const auto text = snToString(sn);
+    {
+        std::ifstream existing(SN_FILE);
+        std::string line;
+        while (std::getline(existing, line)) {
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+            if (line == text) {
+                return;
+            }
+        }
+    }
+
+    std::ofstream out(SN_FILE, std::ios::app);
+    if (out.is_open()) {
+        out << text << '\n';
+    }
+}
+
+bool BleMqttBridge::loadSnFromFile()
+{
+    std::ifstream in(SN_FILE);
+    std::string line;
+    while (std::getline(in, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.size() < SN_LEN) {
+            continue;
+        }
+        if (updateSn(reinterpret_cast<const uint8_t*>(line.data()), SN_FILE)) {
+            LOG("Loaded SN from %s\n", SN_FILE);
+            return true;
+        }
+    }
+    return false;
 }
 
 void BleMqttBridge::setPhoneConnectHandler(std::function<void(bool)> handler)

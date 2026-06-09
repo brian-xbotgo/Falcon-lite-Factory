@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <condition_variable>
 #include <mutex>
 #include <string>
 #include <functional>
@@ -38,10 +39,9 @@ public:
 
     // Copy stored SN to buf (SN_LEN bytes).
     void getSn(uint8_t* buf);
-    const uint8_t* getSnBuf() const { return m_sn; }
 
     // Check if valid SN has been received.
-    bool hasValidSn() const { return m_snValid; }
+    bool hasValidSn() const;
 
     // Register callback for phone connect status changes.
     // connected=true when phone connects to AP, false when disconnects.
@@ -52,6 +52,13 @@ public:
     void onConnect(int rc);
 
 private:
+    bool extractSnFromMessage(const char* topic, const uint8_t* payload,
+                              int payloadLen);
+    bool updateSn(const uint8_t* sn, const char* source);
+    bool loadSnFromFile();
+    static bool isValidSn(const uint8_t* sn);
+    static void persistSn(const uint8_t* sn);
+
     struct mosquitto* m_mosq = nullptr;
 
     // Live status
@@ -62,6 +69,8 @@ private:
     uint8_t m_sn[14] = {};
     bool m_snValid = false;
     bool m_factoryMode = false;
+    mutable std::mutex m_snMutex;
+    std::condition_variable m_snCv;
 
     // Phone connect handler
     std::function<void(bool)> m_phoneConnectHandler;
