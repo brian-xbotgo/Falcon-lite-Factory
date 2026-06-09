@@ -46,8 +46,14 @@ PLATFORM=falcon ./build.sh
 rm -rf build/
 ```
 
-## FALCON independent package
+## FALCON firmware integration
 
-The FALCON build also produces `build/falcon/factory_firmware.tar.gz`.
-See `docs/usage/FALCON_FACTORY_PACKAGE.md` for SDK patch, deployment,
-startup script, MQTT, RNDIS, and BLE notes.
+The FALCON build produces a runtime package by default. `platforms/falcon/build_factory.sh`
+is also the firmware packaging entry: with `SDK_DIR` it integrates the runtime
+into the RK3576 SDK, and with `FACTORY_BUILD_SDK=1` it runs the SDK firmware
+build.
+
+See `docs/usage/FALCON_FACTORY_PACKAGE.md` for the package overview,
+`docs/usage/FALCON_FIRMWARE_FLOW.md` for the full firmware packaging flow, and
+`docs/usage/FALCON_TEST_FIXES.md` for the FALCON board test-item fixes and
+validation notes.
