@@ -1,0 +1,26 @@
+From 3043677e53615a00472e45267cb6a5e1a468812f Mon Sep 17 00:00:00 2001
+From: luojb <luojianbin@xbotgo.com>
+Date: Thu, 20 Nov 2025 11:30:35 +0800
+Subject: [PATCH] connect_limit
+
+---
+ net/bluetooth/hci_event.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/net/bluetooth/hci_event.c b/net/bluetooth/hci_event.c
+index bc14223f6693..7baf495e93c0 100644
+--- a/net/bluetooth/hci_event.c
++++ b/net/bluetooth/hci_event.c
+@@ -6169,7 +6169,8 @@ static struct hci_conn *check_pending_le_conn(struct hci_dev *hdev,
+ 	/* Most controller will fail if we try to create new connections
+ 	 * while we have an existing one in peripheral role.
+ 	 */
+-	if (hdev->conn_hash.le_num_peripheral > 0 &&
++	// When connected as a peripheral, allows additional connections. change ">0" to ">1"
++	if (hdev->conn_hash.le_num_peripheral > 1 &&
+ 	    (!test_bit(HCI_QUIRK_VALID_LE_STATES, &hdev->quirks) ||
+ 	     !(hdev->le_states[3] & 0x10)))
+ 		return NULL;
+-- 
+2.34.1
+

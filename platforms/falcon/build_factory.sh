@@ -6,12 +6,304 @@ OUTPUT_DIR="${BUILD_DIR}/factory_package"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FW_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SDK_TARGET_DIR=""
+SDK_ROOT="${SDK_DIR:-}"
+SDK_ROOT="${SDK_ROOT%/}"
+BUILD_SDK="${FACTORY_BUILD_SDK:-0}"
+SDK_DRY_RUN="${FACTORY_SDK_DRY_RUN:-0}"
+FACTORY_REMOVE_INIT_SCRIPTS="
+S90dragonfly
+S50usbdevice
+S50usbdevice.sh
+S40bluetoothd
+S36wifibt-init.sh
+S51otaupdate
+xbotgo_app_monitor.sh
+S99-auto-reboot
+S95watchdog
+S95watchdog.sh
+S50nginx
+S50fcgiwrap
+S60security
+"
 
 if [ -n "${FALCON_SDK:-}" ]; then
     SDK_TARGET_DIR="$(dirname "$FALCON_SDK")/target"
 fi
 
-echo "[build_factory] Packaging firmware from $BUILD_DIR"
+log()
+{
+    echo "[build_factory] $*"
+}
+
+run_cmd()
+{
+    if [ "$SDK_DRY_RUN" = "1" ]; then
+        printf '[build_factory] DRY-RUN'
+        printf ' %q' "$@"
+        printf '\n'
+        return 0
+    fi
+    "$@"
+}
+
+assert_sdk_subpath()
+{
+    local path="$1"
+    local sdk_abs
+    local path_abs
+
+    sdk_abs="$(readlink -m "$SDK_ROOT")"
+    path_abs="$(readlink -m "$path")"
+    case "$path_abs" in
+        "$sdk_abs"/*)
+            return 0
+            ;;
+        *)
+            echo "ERROR: refusing to modify path outside SDK_DIR: $path_abs" >&2
+            exit 1
+            ;;
+    esac
+}
+
+copy_runtime_to_oem()
+{
+    local dst="$1"
+
+    log "Updating SDK OEM factory runtime: $dst"
+    assert_sdk_subpath "$dst"
+    run_cmd rm -rf "$dst"
+    run_cmd mkdir -p "$dst"
+    if [ "$SDK_DRY_RUN" = "1" ]; then
+        log "DRY-RUN copy runtime package to $dst"
+    else
+        cp -a "$OUTPUT_DIR/." "$dst/"
+        chmod -R u=rwX,go=rX "$dst"
+    fi
+}
+
+write_userdata_flags()
+{
+    local userdata_dir="$1"
+
+    run_cmd mkdir -p "$userdata_dir"
+    if [ "$SDK_DRY_RUN" = "1" ]; then
+        log "DRY-RUN write factory userdata flags to $userdata_dir"
+    else
+        : > "$userdata_dir/factory_mode"
+        : > "$userdata_dir/aging_time.conf"
+    fi
+}
+
+remove_conflicting_init_scripts()
+{
+    local init_dir="$1"
+    local script
+
+    for script in $FACTORY_REMOVE_INIT_SCRIPTS; do
+        run_cmd rm -f "$init_dir/$script"
+    done
+}
+
+install_init_script()
+{
+    local rootfs_dir="$1"
+
+    log "Installing factory init script into rootfs: $rootfs_dir"
+    run_cmd mkdir -p "$rootfs_dir/etc/init.d"
+    if [ "$SDK_DRY_RUN" = "1" ]; then
+        log "DRY-RUN install S90factory_fw to $rootfs_dir/etc/init.d"
+    else
+        cp -f "$SCRIPT_DIR/init.d/S90factory_fw" "$rootfs_dir/etc/init.d/"
+        chmod 755 "$rootfs_dir/etc/init.d/S90factory_fw"
+    fi
+    remove_conflicting_init_scripts "$rootfs_dir/etc/init.d"
+}
+
+install_adb_auth_files()
+{
+    local rootfs_dir="$1"
+
+    log "Installing factory ADB auth files into rootfs: $rootfs_dir"
+    if [ -f "$OUTPUT_DIR/adb_keys" ]; then
+        if [ "$SDK_DRY_RUN" = "1" ]; then
+            log "DRY-RUN install adb_keys to $rootfs_dir/adb_keys"
+        else
+            cp -f "$OUTPUT_DIR/adb_keys" "$rootfs_dir/adb_keys"
+            chmod 644 "$rootfs_dir/adb_keys"
+        fi
+    fi
+
+    if [ -f "$OUTPUT_DIR/etc/profile.d/adbd.sh" ]; then
+        run_cmd mkdir -p "$rootfs_dir/etc/profile.d"
+        if [ "$SDK_DRY_RUN" = "1" ]; then
+            log "DRY-RUN install adbd.sh to $rootfs_dir/etc/profile.d/adbd.sh"
+        else
+            cp -f "$OUTPUT_DIR/etc/profile.d/adbd.sh" "$rootfs_dir/etc/profile.d/adbd.sh"
+            chmod 644 "$rootfs_dir/etc/profile.d/adbd.sh"
+        fi
+    fi
+}
+
+install_rootfs_overlay()
+{
+    local overlay_dir="$1"
+
+    log "Installing factory rootfs overlay: $overlay_dir"
+    run_cmd mkdir -p "$overlay_dir/etc/init.d"
+    if [ "$SDK_DRY_RUN" = "1" ]; then
+        log "DRY-RUN install Buildroot overlay for S90factory_fw"
+    else
+        cp -f "$SCRIPT_DIR/init.d/S90factory_fw" "$overlay_dir/etc/init.d/"
+        chmod 755 "$overlay_dir/etc/init.d/S90factory_fw"
+        if [ -f "$OUTPUT_DIR/adb_keys" ]; then
+            cp -f "$OUTPUT_DIR/adb_keys" "$overlay_dir/adb_keys"
+            chmod 644 "$overlay_dir/adb_keys"
+        fi
+        if [ -f "$OUTPUT_DIR/etc/profile.d/adbd.sh" ]; then
+            mkdir -p "$overlay_dir/etc/profile.d"
+            cp -f "$OUTPUT_DIR/etc/profile.d/adbd.sh" "$overlay_dir/etc/profile.d/adbd.sh"
+            chmod 644 "$overlay_dir/etc/profile.d/adbd.sh"
+        fi
+        : > "$overlay_dir/.skip_fsck"
+        cat > "$overlay_dir/prepare.sh" <<'EOF'
+#!/bin/sh
+set -u
+
+TARGET_DIR="${1:-}"
+[ -n "$TARGET_DIR" ] || exit 0
+
+rm -f "$TARGET_DIR/etc/init.d/S90dragonfly" \
+      "$TARGET_DIR/etc/init.d/S50usbdevice" \
+      "$TARGET_DIR/etc/init.d/S50usbdevice.sh" \
+      "$TARGET_DIR/etc/init.d/S40bluetoothd" \
+      "$TARGET_DIR/etc/init.d/S36wifibt-init.sh" \
+      "$TARGET_DIR/etc/init.d/S51otaupdate" \
+      "$TARGET_DIR/etc/init.d/xbotgo_app_monitor.sh" \
+      "$TARGET_DIR/etc/init.d/S99-auto-reboot" \
+      "$TARGET_DIR/etc/init.d/S95watchdog" \
+      "$TARGET_DIR/etc/init.d/S95watchdog.sh" \
+      "$TARGET_DIR/etc/init.d/S50nginx" \
+      "$TARGET_DIR/etc/init.d/S50fcgiwrap" \
+      "$TARGET_DIR/etc/init.d/S60security"
+
+exit 0
+EOF
+        chmod 755 "$overlay_dir/prepare.sh"
+    fi
+}
+
+ensure_skip_fsck()
+{
+    local rootfs_dir="$1"
+
+    if [ "$SDK_DRY_RUN" = "1" ]; then
+        log "DRY-RUN touch $rootfs_dir/.skip_fsck"
+    else
+        touch "$rootfs_dir/.skip_fsck"
+    fi
+}
+
+apply_sdk_patch()
+{
+    if [ "${FACTORY_APPLY_SDK_PATCH:-1}" = "0" ]; then
+        log "SDK patch disabled"
+        return 0
+    fi
+
+    local patch_dir="${FACTORY_SOURCE_PATCH_DIR:-$SCRIPT_DIR/sdk_patch}"
+    if [ "$SDK_DRY_RUN" = "1" ]; then
+        FACTORY_PATCH_DRY_RUN=1 sh "$SCRIPT_DIR/sdk_patch/apply_factory_patch.sh" "$SDK_ROOT" "$patch_dir"
+    else
+        sh "$SCRIPT_DIR/sdk_patch/apply_factory_patch.sh" "$SDK_ROOT" "$patch_dir"
+    fi
+}
+
+copy_lvgl_resources()
+{
+    local dst="$OUTPUT_DIR/conf/lvgl_source"
+    local src=""
+    local candidate
+
+    for candidate in \
+        "${FACTORY_LVGL_SOURCE_DIR:-}" \
+        "$SCRIPT_DIR/resources/lvgl_source"; do
+        [ -n "$candidate" ] || continue
+        if [ -d "$candidate" ] && [ -f "$candidate/Rajdhani/Rajdhani-SemiBold-5.ttf" ]; then
+            src="$candidate"
+            break
+        fi
+    done
+
+    if [ -z "$src" ]; then
+        echo "ERROR: LVGL resources not found; set FACTORY_LVGL_SOURCE_DIR to the lvgl_source directory" >&2
+        exit 1
+    fi
+
+    log "Copying LVGL resources: $src"
+    rm -rf "$dst"
+    mkdir -p "$dst"
+    cp -a "$src/." "$dst/"
+}
+
+build_sdk()
+{
+    if [ "$SDK_DRY_RUN" = "1" ]; then
+        log "DRY-RUN run SDK build in $SDK_ROOT"
+        return 0
+    fi
+
+    log "Running SDK firmware build: $SDK_ROOT/build.sh"
+    (cd "$SDK_ROOT" && ./build.sh)
+}
+
+integrate_sdk()
+{
+    if [ -z "$SDK_ROOT" ]; then
+        log "SDK_DIR not set, skip SDK firmware integration"
+        return 0
+    fi
+
+    local oem_usr_dir="$SDK_ROOT/device/rockchip/common/extra-parts/oem/normal/usr"
+    local userdata_dir="$SDK_ROOT/device/rockchip/common/extra-parts/userdata/testdata"
+    local overlay_dir="$SDK_ROOT/buildroot/board/rockchip/common/overlays/factory_fw"
+    local rootfs_dir="${FACTORY_SDK_ROOTFS_DIR:-$SDK_ROOT/buildroot/output/rockchip_rk3576_ipc/target}"
+
+    if [ ! -d "$SDK_ROOT" ]; then
+        echo "ERROR: SDK_DIR does not exist: $SDK_ROOT" >&2
+        exit 1
+    fi
+
+    log "Integrating factory runtime into SDK: $SDK_ROOT"
+    log "OEM usr: $oem_usr_dir"
+    log "userdata: $userdata_dir"
+    log "rootfs: $rootfs_dir"
+
+    copy_runtime_to_oem "$oem_usr_dir"
+    write_userdata_flags "$userdata_dir"
+
+    apply_sdk_patch
+    install_rootfs_overlay "$overlay_dir"
+
+    if [ -d "$rootfs_dir" ]; then
+        install_init_script "$rootfs_dir"
+        install_adb_auth_files "$rootfs_dir"
+    else
+        log "rootfs target not found yet: $rootfs_dir"
+    fi
+
+    if [ "$BUILD_SDK" = "1" ]; then
+        build_sdk
+        if [ -d "$rootfs_dir" ]; then
+            install_init_script "$rootfs_dir"
+            install_adb_auth_files "$rootfs_dir"
+            ensure_skip_fsck "$rootfs_dir"
+        fi
+    else
+        log "SDK build skipped; set FACTORY_BUILD_SDK=1 to run SDK ./build.sh"
+    fi
+}
+
+log "Packaging runtime from $BUILD_DIR"
 
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR/bin" \
@@ -28,17 +320,26 @@ cp -f "$BUILD_DIR/factory_test" "$OUTPUT_DIR/bin/"
 cp -f "$SCRIPT_DIR/platform.json" "$OUTPUT_DIR/conf/"
 cp -f "$SCRIPT_DIR/tests.json" "$OUTPUT_DIR/conf/"
 cp -f "$SCRIPT_DIR/conf/"* "$OUTPUT_DIR/conf/"
+copy_lvgl_resources
 
 cp -f "$SCRIPT_DIR/scripts/"* "$OUTPUT_DIR/scripts/"
 cp -f "$SCRIPT_DIR/init.d/"* "$OUTPUT_DIR/init.d/"
-cp -f "$SCRIPT_DIR/sdk_patch/"* "$OUTPUT_DIR/sdk_patch/"
+cp -a "$SCRIPT_DIR/sdk_patch/." "$OUTPUT_DIR/sdk_patch/"
 chmod 755 "$OUTPUT_DIR/scripts/"*.sh "$OUTPUT_DIR/init.d/"* "$OUTPUT_DIR/sdk_patch/"*.sh
 
-for tool in mosquitto dbus-daemon dbus-uuidgen hciattach hciconfig; do
+for tool in mosquitto dbus-daemon dbus-uuidgen adbd arecord amixer hciattach hciconfig rk_hciattach rtk_hciattach wifibt-init.sh wifibt-util.sh bt-tty wifibt-bus wifibt-chip wifibt-id wifibt-info wifibt-module wifibt-vendor; do
     if [ -n "$SDK_TARGET_DIR" ] && [ -f "$SDK_TARGET_DIR/usr/bin/$tool" ]; then
-        cp -f "$SDK_TARGET_DIR/usr/bin/$tool" "$OUTPUT_DIR/bin/"
+        cp -P "$SDK_TARGET_DIR/usr/bin/$tool" "$OUTPUT_DIR/bin/"
     fi
 done
+
+if [ -n "$SDK_TARGET_DIR" ] && [ -f "$SDK_TARGET_DIR/adb_keys" ]; then
+    cp -f "$SDK_TARGET_DIR/adb_keys" "$OUTPUT_DIR/"
+fi
+if [ -n "$SDK_TARGET_DIR" ] && [ -f "$SDK_TARGET_DIR/etc/profile.d/adbd.sh" ]; then
+    mkdir -p "$OUTPUT_DIR/etc/profile.d"
+    cp -f "$SDK_TARGET_DIR/etc/profile.d/adbd.sh" "$OUTPUT_DIR/etc/profile.d/"
+fi
 
 if [ -n "$SDK_TARGET_DIR" ] && [ -d "$SDK_TARGET_DIR/etc/dbus-1" ]; then
     cp -a "$SDK_TARGET_DIR/etc/dbus-1/." "$OUTPUT_DIR/etc/dbus-1/"
@@ -82,12 +383,18 @@ if [ -n "$SDK_TARGET_DIR" ] && [ -f "$SDK_TARGET_DIR/usr/lib/modules/battery.ko"
     cp -f "$SDK_TARGET_DIR/usr/lib/modules/battery.ko" "$OUTPUT_DIR/lib/modules/"
 fi
 
-FALCON_SOURCE_ROOT="${FALCON_SOURCE_ROOT:-/home/gdh/falcon/app/lastcode20251210/XbotGo-Dragonfly-Embedded}"
-MOTOR_KO="$FALCON_SOURCE_ROOT/sdk_patch/kernel_patch/motor_tmi8152/motor_tmi8152.ko"
+MOTOR_KO="${FACTORY_MOTOR_KO:-$SCRIPT_DIR/sdk_patch/kernel_patch/motor_tmi8152/motor_tmi8152.ko}"
 if [ -f "$MOTOR_KO" ]; then
     cp -f "$MOTOR_KO" "$OUTPUT_DIR/conf/"
 fi
 
+BATTERY_KO="${FACTORY_BATTERY_KO:-$SCRIPT_DIR/sdk_patch/kernel_patch/om70x0x_battery/battery.ko}"
+if [ -f "$BATTERY_KO" ]; then
+    mkdir -p "$OUTPUT_DIR/lib/modules"
+    cp -f "$BATTERY_KO" "$OUTPUT_DIR/lib/modules/battery.ko"
+fi
+
 tar czf "${BUILD_DIR}/factory_firmware.tar.gz" -C "$OUTPUT_DIR" .
 
-echo "[build_factory] Done: ${BUILD_DIR}/factory_firmware.tar.gz"
+log "Runtime package done: ${BUILD_DIR}/factory_firmware.tar.gz"
+integrate_sdk

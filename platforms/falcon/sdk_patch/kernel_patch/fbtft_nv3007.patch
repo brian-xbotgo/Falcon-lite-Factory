@@ -1,0 +1,67 @@
+diff --git a/drivers/staging/fbtft/Makefile b/drivers/staging/fbtft/Makefile
+index e9cdf0f0a7da..f6065f5cc897 100644
+--- a/drivers/staging/fbtft/Makefile
++++ b/drivers/staging/fbtft/Makefile
+@@ -36,3 +36,4 @@ obj-$(CONFIG_FB_TFT_TLS8204)     += fb_tls8204.o
+ obj-$(CONFIG_FB_TFT_UC1611)      += fb_uc1611.o
+ obj-$(CONFIG_FB_TFT_UC1701)      += fb_uc1701.o
+ obj-$(CONFIG_FB_TFT_UPD161704)   += fb_upd161704.o
++obj-y                            += fb_nv3007.o
+diff --git a/drivers/staging/fbtft/fbtft-core.c b/drivers/staging/fbtft/fbtft-core.c
+index afaba94d1d1c..28d64b1244d8 100644
+--- a/drivers/staging/fbtft/fbtft-core.c
++++ b/drivers/staging/fbtft/fbtft-core.c
+@@ -89,7 +89,7 @@ static int fbtft_request_one_gpio(struct fbtft_par *par,
+ 
+ static int fbtft_request_gpios(struct fbtft_par *par)
+ {
+-	int i;
++	//int i;
+ 	int ret;
+ 
+ 	ret = fbtft_request_one_gpio(par, "reset", 0, &par->gpio.reset);
+@@ -98,7 +98,7 @@ static int fbtft_request_gpios(struct fbtft_par *par)
+ 	ret = fbtft_request_one_gpio(par, "dc", 0, &par->gpio.dc);
+ 	if (ret)
+ 		return ret;
+-	ret = fbtft_request_one_gpio(par, "rd", 0, &par->gpio.rd);
++	/*ret = fbtft_request_one_gpio(par, "rd", 0, &par->gpio.rd);
+ 	if (ret)
+ 		return ret;
+ 	ret = fbtft_request_one_gpio(par, "wr", 0, &par->gpio.wr);
+@@ -123,7 +123,7 @@ static int fbtft_request_gpios(struct fbtft_par *par)
+ 					     &par->gpio.aux[i]);
+ 		if (ret)
+ 			return ret;
+-	}
++	}*/
+ 
+ 	return 0;
+ }
+@@ -223,7 +223,7 @@ static void fbtft_reset(struct fbtft_par *par)
+ 	gpiod_set_value_cansleep(par->gpio.reset, 0);
+ 	msleep(120);
+ 
+-	gpiod_set_value_cansleep(par->gpio.cs, 1);  /* Activate chip */
++	gpiod_set_value_cansleep(par->gpio.reset, 1);  /* Activate chip */
+ }
+ 
+ static void fbtft_update_display(struct fbtft_par *par, unsigned int start_line,
+@@ -819,7 +819,7 @@ int fbtft_register_framebuffer(struct fb_info *fb_info)
+ 	}
+ 
+ 	/* update the entire display */
+-	par->fbtftops.update_display(par, 0, par->info->var.yres - 1);
++	//par->fbtftops.update_display(par, 0, par->info->var.yres - 1);
+ 
+ 	if (par->fbtftops.set_gamma && par->gamma.curves) {
+ 		ret = par->fbtftops.set_gamma(par, par->gamma.curves);
+@@ -1100,6 +1100,8 @@ static int fbtft_verify_gpios(struct fbtft_par *par)
+ 	struct fbtft_platform_data *pdata = par->pdata;
+ 	int i;
+ 
++    return 0;
++
+ 	fbtft_par_dbg(DEBUG_VERIFY_GPIOS, par, "%s()\n", __func__);
+ 
+ 	if (pdata->display.buswidth != 9 &&  par->startbyte == 0 &&

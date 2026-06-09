@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2024 Luckfox Technology Co., Ltd.
+ *
+ */
+
+// #include "luckfox-core3576.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+
+&combphy0_ps {
+	status = "okay";
+};
+&pcie0 {
+	// rockchip,skip-scan-in-resume;
+	reset-gpios = <&gpio1 RK_PC1 GPIO_ACTIVE_HIGH>;
+	pinctrl-0 = <&pcie_rst_gpio>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&pinctrl {
+	pcie {
+		pcie_rst_gpio: pcie-rst-gpio {
+			rockchip,pins = <1 RK_PC1 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+};

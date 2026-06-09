@@ -1,0 +1,128 @@
+diff --git a/drivers/usb/dwc3/core.h b/drivers/usb/dwc3/core.h
+index d9a868891aa8..0dfa4e46998d 100644
+--- a/drivers/usb/dwc3/core.h
++++ b/drivers/usb/dwc3/core.h
+@@ -970,6 +970,16 @@ struct dwc3_scratchpad_array {
+ 	__le64	dma_adr[DWC3_MAX_HIBER_SCRATCHBUFS];
+ };
+ 
++//#define _USB3_CHARGE_
++#ifdef _USB3_CHARGE_
++struct usb_charger_data {
++    struct power_supply *psy;
++    struct power_supply_desc psy_desc;
++    bool online;
++};
++#endif
++
++
+ /**
+  * struct dwc3 - representation of our controller
+  * @drd_work: workqueue used for role swapping
+@@ -1363,6 +1373,9 @@ struct dwc3 {
+ 	int			last_fifo_depth;
+ 	int			num_ep_resized;
+ 	struct dentry		*debug_root;
++#ifdef _USB3_CHARGE_
++	struct usb_charger_data usb_charge;
++#endif
+ };
+ 
+ #define INCRX_BURST_MODE 0
+diff --git a/drivers/usb/dwc3/gadget.c b/drivers/usb/dwc3/gadget.c
+index dda6231587b1..93fcab948550 100644
+--- a/drivers/usb/dwc3/gadget.c
++++ b/drivers/usb/dwc3/gadget.c
+@@ -4122,7 +4122,7 @@ static void dwc3_gadget_disconnect_interrupt(struct dwc3 *dwc)
+ 	 * already decremented to zero, but waiting for the disconnect
+ 	 * interrupt to set dwc->connected to FALSE.
+ 	 */
+-	pm_request_idle(dwc->dev);
++	pm_request_idle(dwc->dev);	
+ }
+ 
+ static void dwc3_gadget_reset_interrupt(struct dwc3 *dwc)
+@@ -4486,6 +4486,10 @@ static void dwc3_gadget_interrupt(struct dwc3 *dwc,
+ 		break;
+ 	case DWC3_DEVICE_EVENT_CONNECT_DONE:
+ 		dwc3_gadget_conndone_interrupt(dwc);
++#ifdef _USB3_CHARGE_
++		dwc->usb_charge.online = 1;
++		power_supply_changed(dwc->usb_charge.psy);
++#endif
+ 		break;
+ 	case DWC3_DEVICE_EVENT_WAKEUP:
+ 		dwc3_gadget_wakeup_interrupt(dwc);
+@@ -4499,7 +4503,11 @@ static void dwc3_gadget_interrupt(struct dwc3 *dwc,
+ 	case DWC3_DEVICE_EVENT_SUSPEND:
+ 		/* It changed to be suspend event for version 2.30a and above */
+ 		if (!DWC3_VER_IS_PRIOR(DWC3, 230A))
+-			dwc3_gadget_suspend_interrupt(dwc, event->event_info);
++			dwc3_gadget_suspend_interrupt(dwc, event->event_info);//230A以上的版本跑这个分支, RK3576的dwc3是300A
++#ifdef _USB3_CHARGE_
++		dwc->usb_charge.online = 0;
++		power_supply_changed(dwc->usb_charge.psy);
++#endif
+ 		break;
+ 	case DWC3_DEVICE_EVENT_SOF:
+ 	case DWC3_DEVICE_EVENT_ERRATIC_ERROR:
+@@ -4683,6 +4691,29 @@ static void dwc_gadget_release(struct device *dev)
+ 	kfree(gadget);
+ }
+ 
++#ifdef _USB3_CHARGE_
++static enum power_supply_property usb_charger_props[] = {
++    POWER_SUPPLY_PROP_ONLINE,
++};
++
++static int usb_charger_get_property(struct power_supply *psy,
++                   enum power_supply_property psp,
++                   union power_supply_propval *val)
++{
++    struct usb_charger_data *data = power_supply_get_drvdata(psy);
++    
++    switch (psp) {
++    case POWER_SUPPLY_PROP_ONLINE:
++        val->intval = data->online;
++        break;
++    default:
++        return -EINVAL;
++    }
++    
++    return 0;
++}
++#endif
++
+ /**
+  * dwc3_gadget_init - initializes gadget related registers
+  * @dwc: pointer to our controller context structure
+@@ -4787,6 +4818,29 @@ int dwc3_gadget_init(struct dwc3 *dwc)
+ 	else
+ 		dwc3_gadget_set_speed(dwc->gadget, dwc->maximum_speed);
+ 
++#ifdef _USB3_CHARGE_
++    struct power_supply_config psy_cfg = {};
++
++
++    dwc->usb_charge.psy_desc.name = "usb-charger";
++    dwc->usb_charge.psy_desc.type = POWER_SUPPLY_TYPE_USB;
++    dwc->usb_charge.psy_desc.properties = usb_charger_props;
++    dwc->usb_charge.psy_desc.num_properties = ARRAY_SIZE(usb_charger_props);
++    dwc->usb_charge.psy_desc.get_property = usb_charger_get_property;
++    
++    psy_cfg.drv_data = &dwc->usb_charge;
++    psy_cfg.of_node = dwc->dev->of_node;
++    
++    dwc->usb_charge.psy = devm_power_supply_register(dwc->dev, &dwc->usb_charge.psy_desc, &psy_cfg);
++    if (IS_ERR(dwc->usb_charge.psy)) {
++        dev_err(dwc->dev, "Failed to register power supply: %ld\n", PTR_ERR(dwc->usb_charge.psy));
++        //return PTR_ERR(data->psy);
++    }
++
++    dwc->usb_charge.online = 0; 
++
++#endif
++
+ 	return 0;
+ 
+ err5:

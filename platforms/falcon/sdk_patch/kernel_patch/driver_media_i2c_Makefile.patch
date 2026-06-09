@@ -1,0 +1,14 @@
+diff --git a/drivers/media/i2c/Makefile b/drivers/media/i2c/Makefile
+index 12cd075780b4..2040af657d13 100644
+--- a/drivers/media/i2c/Makefile
++++ b/drivers/media/i2c/Makefile
+@@ -66,7 +66,8 @@ obj-$(CONFIG_VIDEO_GC2385) += gc2385.o
+ obj-$(CONFIG_VIDEO_GC3003) += gc3003.o
+ obj-$(CONFIG_VIDEO_GC4023) += gc4023.o
+ obj-$(CONFIG_VIDEO_GC4653) += gc4653.o
+-obj-$(CONFIG_VIDEO_GC4663) += gc4663.o
++obj-y += gc4663.o
++obj-y += imx678.o
+ obj-$(CONFIG_VIDEO_GC4C33) += gc4c33.o
+ obj-$(CONFIG_VIDEO_GC5024) += gc5024.o
+ obj-$(CONFIG_VIDEO_GC5025) += gc5025.o

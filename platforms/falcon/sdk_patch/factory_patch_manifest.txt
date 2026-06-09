@@ -1,12 +1,11 @@
 # FALCON factory firmware SDK patch checklist
 #
-# Source reference:
-# /home/gdh/falcon/app/lastcode20251210/XbotGo-Dragonfly-Embedded/sdk_patch
-#
-# Keep hardware/runtime enablement. Do not carry normal business app startup into
-# the factory package.
+# FALCON factory firmware carries its own SDK patch subset here.
+# Keep hardware/runtime enablement. Do not carry normal business app startup
+# into the factory package.
 
 kernel_patch/dragonfly.dts
+kernel_patch/rockchip_linux_defconfig
 kernel_patch/dragonfly-core3576.dtsi
 kernel_patch/dragonfly-cam.dtsi
 kernel_patch/dragonfly-key.dtsi
@@ -14,6 +13,10 @@ kernel_patch/dragonfly-motor.dtsi
 kernel_patch/dragonfly-pcie.dtsi
 kernel_patch/dragonfly-usb-c.dtsi
 kernel_patch/dragonfly-wireless.dtsi
+kernel_patch/gc4663.c
+kernel_patch/imx678.c
+kernel_patch/fb_nv3007.c
+kernel_patch/rk_fiq_debugger.c
 kernel_patch/dragonfly-wifi.patch
 kernel_patch/allow_connect_two_role.patch
 kernel_patch/usb_charger_detect.patch
@@ -23,13 +26,20 @@ kernel_patch/driver_media_i2c_Makefile.patch
 kernel_patch/motor_tmi8152/motor_tmi8152.ko
 kernel_patch/om70x0x_battery/battery.ko
 
-buildroot_patch/S40bluetoothd
-buildroot_patch/S50usbdevice.sh
+buildroot_patch/S01syslogd
 buildroot_patch/dragonfly-bt.patch
-buildroot_patch/profile
 buildroot_patch/post-build.sh
 external/wpa_supplicant.conf
 external/dnsmasq.conf
+device/rockchip/common/scripts/mk-extra-parts.sh
+device_rk3576_defconfig/rockchip_rk3576_dragonfly_defconfig
+device_rk3576_defconfig/rockchip_rk3576_ipc_defconfig
+device_rk3576_defconfig/parameter-ab.txt
+device_rk3576_defconfig/rk3576_defconfig
+device_rk3576_defconfig/recovery.mk
+device_rk3576_defconfig/ddrbin_param.txt
+device_rk3576_defconfig/rk3576_ddr_lp4_2112MHz_lp5_2736MHz_v1.09.bin
+device_rk3576_defconfig/rk3576_usbplug_v1.04.bin
 
 # Exclude from the independent factory package:
 # buildroot_patch/S90dragonfly, misc_app, prod_test, normal_lvgl_app,

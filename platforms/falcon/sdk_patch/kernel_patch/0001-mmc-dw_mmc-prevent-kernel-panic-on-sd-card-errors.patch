@@ -1,0 +1,110 @@
+Date: Tue, 26 May 2026 20:40:00 +0800
+Subject: [PATCH] mmc: dw_mmc: prevent kernel panic from SD card hardware errors
+
+Fix kernel panics triggered by SD card physical-layer errors through
+defensive guards and interrupt synchronization.
+
+1. Race between the interrupt handler and mmc_power_cycle during reset:
+   When the MMC core initiates a hardware reset (mmc_blk_reset ->
+   mmc_hw_reset -> mmc_sd_hw_reset -> mmc_power_cycle), an interrupt
+   handler may still be running on another CPU. Add synchronize_irq()
+   in MMC_POWER_OFF to wait for any in-flight handler to complete
+   before modifying the controller state. This closes the race window
+   where the handler accesses host->data / host->sg while the reset
+   path modifies them.
+
+2. NULL pointer dereference guards in the interrupt path:
+   - dw_mci_interrupt: if slot is NULL (driver unbind race), clear
+     pending interrupts, mask all sources, and bail out
+   - dw_mci_handle_cd: bail out if slot is NULL
+   - dw_mci_read_data_pio / dw_mci_write_data_pio: bail out if
+     host->data is NULL (tasklet may have freed it on another CPU)
+   - dw_mci_rk3288_set_ios: bail out if slot is NULL
+
+---
+ drivers/mmc/host/dw_mmc.c           | 44 +++++++++++++++++++++++++++++++++++++
+ drivers/mmc/host/dw_mmc-rockchip.c  |  2 +-
+ 2 files changed, 45 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/mmc/host/dw_mmc-rockchip.c b/drivers/mmc/host/dw_mmc-rockchip.c
+index xxxxxx..xxxxxx 100644
+--- a/drivers/mmc/host/dw_mmc-rockchip.c
++++ b/drivers/mmc/host/dw_mmc-rockchip.c
+@@ -160,7 +160,7 @@ static void dw_mci_rk3288_set_ios(struct dw_mci *host, struct mmc_ios *ios)
+ 	unsigned int cclkin;
+ 	u32 bus_hz;
+
+-	if (ios->clock == 0)
++	if (!host->slot || ios->clock == 0)
+ 		return;
+
+ 	/*
+diff --git a/drivers/mmc/host/dw_mmc.c b/drivers/mmc/host/dw_mmc.c
+index xxxxxx..xxxxxx 100644
+--- a/drivers/mmc/host/dw_mmc.c
++++ b/drivers/mmc/host/dw_mmc.c
+@@ -1592,6 +1592,15 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
+
+ 		break;
+ 	case MMC_POWER_OFF:
++		/*
++		 * Wait for any in-flight interrupt handler to complete
++		 * before powering off the card. This prevents a race
++		 * where an interrupt handler running on another CPU
++		 * accesses host data structures (host->data, host->sg)
++		 * while this path is modifying the controller state.
++		 */
++		synchronize_irq(slot->host->irq);
++
+ 		if (!IS_ERR_OR_NULL(slot->host->pinctrl))
+ 			pinctrl_select_state(slot->host->pinctrl, slot->host->idle_state);
+
+@@ -2729,6 +2738,9 @@ static void dw_mci_read_data_pio(struct dw_mci *host, bool dto)
+ 	unsigned int len;
+ 	unsigned int remain, fcnt;
+
++	if (!data)
++		return;
++
+ 	do {
+ 		if (!sg_miter_next(sg_miter))
+ 			goto done;
+@@ -2786,6 +2798,9 @@ static void dw_mci_write_data_pio(struct dw_mci *host)
+ 	unsigned int fifo_depth = host->fifo_depth;
+ 	unsigned int remain, fcnt;
+
++	if (!data)
++		return;
++
+ 	do {
+ 		if (!sg_miter_next(sg_miter))
+ 			goto done;
+@@ -2847,6 +2862,9 @@ static void dw_mci_handle_cd(struct dw_mci *host)
+ {
+ 	struct dw_mci_slot *slot = host->slot;
+
++	if (!slot)
++		return;
++
+ 	mmc_detect_change(slot->mmc,
+ 		msecs_to_jiffies(host->pdata->detect_delay_ms));
+ }
+@@ -2857,6 +2875,18 @@ static irqreturn_t dw_mci_interrupt(int irq, void *dev_id)
+ 	u32 pending;
+ 	struct dw_mci_slot *slot = host->slot;
+
++	/*
++	 * If the slot has been removed (e.g. during driver unbind),
++	 * perform the same interrupt shutdown used in dw_mci_remove()
++	 * and bail out to avoid NULL dereference on slot->mmc /
++	 * slot->sdio_id AND to prevent an interrupt storm.
++	 */
++	if (!slot) {
++		mci_writel(host, RINTSTS, 0xFFFFFFFF);
++		mci_writel(host, INTMASK, 0);
++		return IRQ_HANDLED;
++	}
++
+ 	pending = mci_readl(host, MINTSTS); /* read-only mask reg */
+
+ 	if (pending) {

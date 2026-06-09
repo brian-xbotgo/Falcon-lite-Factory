@@ -1,0 +1,52 @@
+/ {
+	adc_keys: adc-keys {
+		compatible = "adc-keys";
+		io-channels = <&saradc 1>;
+		io-channel-names = "buttons";
+		keyup-threshold-microvolt = <1800000>;
+		poll-interval = <100>;
+
+		a_key {
+			label = "A";
+			linux,code = <KEY_F13>;
+			press-threshold-microvolt = <1080000>;  // 主机位: 1.08V
+		};
+
+		b_key {
+			label = "B";
+			linux,code = <KEY_F14>;
+			press-threshold-microvolt = <1408696>;  // 辅机位: 1.408695652V
+		};
+
+		m1_key {
+			label = "M1";
+			linux,code = <KEY_F15>;
+			press-threshold-microvolt = <728571>;   // MODE1 R2: 0.728571429V
+		};
+
+		m2_key {
+			label = "M2";
+			linux,code = <KEY_F16>;
+			press-threshold-microvolt = <1604348>;  // MODE2 R3: 1.604347826V
+		};
+
+		m3_key {
+			label = "M3";
+			linux,code = <KEY_F17>;
+			press-threshold-microvolt = <0>;   // MODE3 R4: 0V
+		};
+
+		// 新增组合按键
+    		combo1_key {
+        		label = "COMBO1";
+        		linux,code = <KEY_F18>;
+        		press-threshold-microvolt = <925714>;   // 主机位与辅机位: 0.925714286V
+    		};
+
+    		combo2_key {
+        		label = "COMBO2";
+        		linux,code = <KEY_F19>;
+        		press-threshold-microvolt = <573750>;   // 主机位与M1: 0.573750V
+    		};
+	};
+};
