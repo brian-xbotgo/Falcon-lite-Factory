@@ -24,6 +24,9 @@ log()
 ensure_dirs()
 {
     mkdir -p "$LOG_DIR" "$RUN_DIR" /userdata/prod /device_data /tmp
+    if mount | grep -q " on /device_data "; then
+        mount -o remount,rw /device_data 2>/dev/null || log "remount /device_data rw failed"
+    fi
     touch "$FACTORY_FLAG" 2>/dev/null || true
 }
 
@@ -37,6 +40,43 @@ kill_by_pidfile()
         fi
         rm -f "$pidfile"
     fi
+}
+
+stop_conflicting_processes()
+{
+    local name
+    local pattern
+    local pids
+
+    for pattern in \
+        xbotgo_app_monitor.sh \
+        S99-auto-reboot \
+        S51otaupdate; do
+        pids="$(ps 2>/dev/null | awk -v pat="$pattern" '$0 ~ pat && $0 !~ /awk/ {print $1}')"
+        [ -n "$pids" ] || continue
+        log "stop conflicting script: $pattern"
+        kill $pids >/dev/null 2>&1 || true
+    done
+
+    for name in \
+        xbotgo_app_monitor.sh \
+        ota_update \
+        updateEngine \
+        misc_app \
+        prod_test \
+        normal_lvgl_app \
+        charge_lvgl_app \
+        multi_media \
+        file_mng \
+        http_agent \
+        nginx \
+        fcgiwrap \
+        rkipc; do
+        if pidof "$name" >/dev/null 2>&1; then
+            log "stop conflicting process: $name"
+            killall "$name" >/dev/null 2>&1 || true
+        fi
+    done
 }
 
 start_mqtt()
@@ -65,11 +105,17 @@ start_mqtt()
 
 start_rndis()
 {
+    if command -v usbdevice >/dev/null 2>&1; then
+        usbdevice stop >> "$LOG_DIR/factory_rndis.log" 2>&1 || true
+    fi
+
     if [ "${FACTORY_ENABLE_RNDIS:-1}" = "0" ]; then
-        log "RNDIS disabled"
+        log "RNDIS disabled, start USB as ADB-only"
+        FACTORY_USB_MODE=adb "$SCRIPT_DIR/factory_rndis.sh" start >> "$LOG_DIR/factory_rndis.log" 2>&1 || log "ADB-only USB init failed"
         return 0
     fi
     if [ -x "$SCRIPT_DIR/factory_rndis.sh" ]; then
+        log "start USB mode=${FACTORY_USB_MODE:-auto}"
         "$SCRIPT_DIR/factory_rndis.sh" start >> "$LOG_DIR/factory_rndis.log" 2>&1 || log "RNDIS init failed"
     else
         log "factory_rndis.sh missing"
@@ -105,14 +151,22 @@ init_bluetooth()
         echo 1 > /sys/class/rfkill/rfkill0/state 2>/dev/null || true
     fi
 
-    if ! hciconfig hci0 >/dev/null 2>&1 && [ -e /dev/ttyS4 ] && command -v hciattach >/dev/null 2>&1; then
-        hciattach /dev/ttyS4 qca 3000000 flow >> "$LOG_DIR/bluetooth.log" 2>&1 &
-        echo $! > "$RUN_DIR/hciattach.pid"
+    if command -v wifibt-init.sh >/dev/null 2>&1; then
+        wifibt-init.sh start_bt >> "$LOG_DIR/bluetooth.log" 2>&1 || log "wifibt-init start_bt failed"
+        sleep 2
+    fi
+
+    if ! hciconfig hci0 >/dev/null 2>&1 && [ -e /dev/ttyS4 ]; then
+        if command -v hciattach >/dev/null 2>&1; then
+            hciattach /dev/ttyS4 qca 3000000 flow >> "$LOG_DIR/bluetooth.log" 2>&1 &
+            echo $! > "$RUN_DIR/hciattach.pid"
+        fi
         sleep 2
     fi
 
     if command -v hciconfig >/dev/null 2>&1; then
         hciconfig hci0 up >> "$LOG_DIR/bluetooth.log" 2>&1 || log "hci0 up failed"
+        hciconfig hci0 >> "$LOG_DIR/bluetooth.log" 2>&1 || true
     fi
 
     if ! pidof bluetoothd >/dev/null 2>&1; then
@@ -195,6 +249,7 @@ stop_all()
 start_all()
 {
     ensure_dirs
+    stop_conflicting_processes
     hwclock --hctosys >/dev/null 2>&1 || true
     load_modules
     start_rndis
