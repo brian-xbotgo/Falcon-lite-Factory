@@ -47,6 +47,15 @@ bool fileHasPayload(const std::string& path)
     return ::stat(path.c_str(), &st) == 0 && st.st_size > 44;
 }
 
+long long fileSize(const std::string& path)
+{
+    struct stat st {};
+    if (::stat(path.c_str(), &st) != 0) {
+        return -1;
+    }
+    return static_cast<long long>(st.st_size);
+}
+
 int runCommand(const std::string& tag, const std::string& cmd)
 {
     std::fprintf(stderr, "[MicTest] %s cmd=%s\n", tag.c_str(), cmd.c_str());
@@ -158,11 +167,15 @@ public:
         }
 
         const bool wavReady = fileHasPayload(recordPath);
-        std::fprintf(stderr, "[MicTest] wav path=%s ready=%d buzzer=%s error_code=0x%08x\n",
-                     recordPath.c_str(), wavReady ? 1 : 0,
+        const long long wavSize = fileSize(recordPath);
+        std::fprintf(stderr, "[MicTest] wav path=%s ready=%d size=%lld buzzer=%s error_code=0x%08x\n",
+                     recordPath.c_str(), wavReady ? 1 : 0, wavSize,
                      buzzerOk ? "PASS" : "FAIL", errorCode);
         if (!wavReady) {
             errorCode |= kRecordFail;
+        } else {
+            runCommand("chmod_wav", "chmod 644 " + shellQuote(recordPath));
+            ::sync();
         }
 
         if (errorCode != 0) {
@@ -174,6 +187,7 @@ public:
         auto result = TestResult::pass();
         result.detail = "mic wav ready";
         result.data["record_path"] = recordPath;
+        result.data["record_size"] = wavSize;
         return result;
     }
 };
