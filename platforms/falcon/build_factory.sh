@@ -28,6 +28,13 @@ S60security
 
 if [ -n "${FALCON_SDK:-}" ]; then
     SDK_TARGET_DIR="$(dirname "$FALCON_SDK")/target"
+    if [ -z "$SDK_ROOT" ]; then
+        case "$FALCON_SDK" in
+            */buildroot/output/*/host)
+                SDK_ROOT="${FALCON_SDK%/buildroot/output/*/host}"
+                ;;
+        esac
+    fi
 fi
 
 log()
@@ -259,6 +266,14 @@ build_sdk()
 integrate_sdk()
 {
     if [ -z "$SDK_ROOT" ]; then
+        if [ "$BUILD_SDK" = "1" ] || [ "$SDK_DRY_RUN" = "1" ]; then
+            echo "ERROR: SDK_DIR is required for firmware integration." >&2
+            echo "       Example:" >&2
+            echo "       export SDK_DIR=/home/gdh/falcon/Omni3576-sdk" >&2
+            echo '       export FALCON_SDK=$SDK_DIR/buildroot/output/rockchip_rk3576_ipc/host' >&2
+            echo "       FACTORY_BUILD_SDK=1 PLATFORM=falcon ./build.sh" >&2
+            exit 1
+        fi
         log "SDK_DIR not set, skip SDK firmware integration"
         return 0
     fi
