@@ -15,6 +15,8 @@ export PATH="$BIN_DIR:/usr/bin:/usr/sbin:/bin:/sbin:$PATH"
 export LD_LIBRARY_PATH="$LIB_DIR:/usr/lib:/lib:${LD_LIBRARY_PATH:-}"
 export FACTORY_PLATFORM_JSON="${FACTORY_PLATFORM_JSON:-$CONF_DIR/platform.json}"
 export FACTORY_TESTS_JSON="${FACTORY_TESTS_JSON:-$CONF_DIR/tests.json}"
+export WIFIBT_MODULE_DIR="${WIFIBT_MODULE_DIR:-$LIB_DIR/modules}"
+export WIFIBT_FIRMWARE_DIR="${WIFIBT_FIRMWARE_DIR:-$LIB_DIR/firmware}"
 
 log()
 {
@@ -98,7 +100,7 @@ start_mqtt()
     conf="$CONF_DIR/mosquitto.conf"
     [ -f "$conf" ] || conf=/etc/mosquitto/mosquitto.conf
     log "start mosquitto conf=$conf"
-    "$broker" -c "$conf" > "$LOG_DIR/mosquitto.log" 2>&1 &
+    "$broker" -c "$conf" > "$LOG_DIR/mosquitto.log" 2>&1 < /dev/null &
     echo $! > "$RUN_DIR/mosquitto.pid"
     sleep 1
 }
@@ -139,17 +141,326 @@ load_modules()
     done
 }
 
+hci0_is_up()
+{
+    hciconfig hci0 2>/dev/null | grep -q "UP RUNNING"
+}
+
+hci0_exists()
+{
+    hciconfig hci0 >/dev/null 2>&1
+}
+
+bring_hci0_up()
+{
+    if hci0_is_up; then
+        return 0
+    fi
+    if ! hci0_exists; then
+        return 1
+    fi
+
+    hciconfig hci0 up >> "$LOG_DIR/bluetooth.log" 2>&1 || return 1
+    hci0_is_up
+}
+
 wait_for_hci0()
 {
     timeout="${1:-10}"
     while [ "$timeout" -gt 0 ]; do
-        if hciconfig hci0 >/dev/null 2>&1; then
+        if bring_hci0_up; then
             return 0
         fi
         sleep 1
         timeout=$((timeout - 1))
     done
     return 1
+}
+
+stop_hci_attach()
+{
+    kill_by_pidfile "$RUN_DIR/hciattach.pid"
+    killall hciattach >/dev/null 2>&1 || true
+    killall brcm_patchram_plus1 >/dev/null 2>&1 || true
+    killall rk_hciattach >/dev/null 2>&1 || true
+    killall rtk_hciattach >/dev/null 2>&1 || true
+}
+
+bt_rfkill_states()
+{
+    for type_file in /sys/class/rfkill/rfkill*/type; do
+        [ -f "$type_file" ] || continue
+        if grep -qi "^bluetooth$" "$type_file" 2>/dev/null; then
+            echo "${type_file%/type}/state"
+        fi
+    done
+}
+
+reset_bt_rfkill()
+{
+    states="$(bt_rfkill_states)"
+    [ -n "$states" ] || return 0
+
+    for state in $states; do
+        [ -w "$state" ] && echo 0 > "$state" 2>/dev/null || true
+    done
+    [ -w /proc/bluetooth/sleep/btwrite ] && echo 0 > /proc/bluetooth/sleep/btwrite 2>/dev/null || true
+    sleep 1
+    for state in $states; do
+        [ -w "$state" ] && echo 1 > "$state" 2>/dev/null || true
+    done
+    [ -w /proc/bluetooth/sleep/btwrite ] && echo 1 > /proc/bluetooth/sleep/btwrite 2>/dev/null || true
+    sleep 1
+}
+
+root_is_readonly()
+{
+    mount | awk '$3 == "/" && $6 ~ /(^|,)ro(,|$)/ { found = 1 } END { exit !found }'
+}
+
+prepare_firmware_target_dir()
+{
+    target="$1"
+
+    if [ -d "$target" ]; then
+        return 0
+    fi
+    if mkdir -p "$target" 2>/dev/null; then
+        return 0
+    fi
+    if mount -o remount,rw / 2>/dev/null && mkdir -p "$target" 2>/dev/null; then
+        return 0
+    fi
+
+    log "cannot create firmware target dir: $target"
+    return 1
+}
+
+expose_bluetooth_firmware()
+{
+    src_qca="$WIFIBT_FIRMWARE_DIR/qca"
+    dst_qca=/lib/firmware/qca
+    root_was_ro=0
+
+    [ -d "$src_qca" ] || return 0
+    if [ -f "$dst_qca/hpbtfw21.tlv" ]; then
+        return 0
+    fi
+
+    if root_is_readonly; then
+        root_was_ro=1
+    fi
+
+    if ! prepare_firmware_target_dir "$dst_qca"; then
+        if [ "$root_was_ro" = "1" ]; then
+            mount -o remount,ro / 2>/dev/null || true
+        fi
+        return 1
+    fi
+
+    if mount | awk -v target="$dst_qca" '$3 == target { found = 1 } END { exit !found }'; then
+        :
+    elif mount -o bind "$src_qca" "$dst_qca" 2>/dev/null; then
+        log "bind BT QCA firmware: $src_qca -> $dst_qca"
+    else
+        log "bind BT QCA firmware failed; creating symlinks in $dst_qca"
+        for fw in "$src_qca"/*; do
+            [ -f "$fw" ] || continue
+            ln -sf "$fw" "$dst_qca/$(basename "$fw")" 2>/dev/null || true
+        done
+    fi
+
+    if [ "$root_was_ro" = "1" ]; then
+        mount -o remount,ro / 2>/dev/null || true
+    fi
+}
+
+bt_tty()
+{
+    if [ -n "${FACTORY_BT_TTY:-}" ]; then
+        echo "$FACTORY_BT_TTY"
+        return 0
+    fi
+
+    if command -v bt-tty >/dev/null 2>&1; then
+        tty="$(bt-tty 2>/dev/null || true)"
+        if [ -n "$tty" ] && [ "$tty" != "unknown" ] && [ "$tty" != "none" ]; then
+            echo "$tty"
+            return 0
+        fi
+    fi
+
+    for tty in /dev/ttyS4 /dev/ttyS2; do
+        if [ -e "$tty" ]; then
+            echo "$tty"
+            return 0
+        fi
+    done
+    return 1
+}
+
+start_wifibt_stack()
+{
+    if ! command -v wifibt-init.sh >/dev/null 2>&1; then
+        return 1
+    fi
+
+    expose_bluetooth_firmware || true
+    log "start Wi-Fi/BT stack for Bluetooth module_dir=$WIFIBT_MODULE_DIR firmware_dir=$WIFIBT_FIRMWARE_DIR"
+    {
+        command -v wifibt-info >/dev/null 2>&1 && wifibt-info || true
+        wifibt-init.sh start
+    } >> "$LOG_DIR/bluetooth.log" 2>&1 || log "wifibt-init start failed"
+}
+
+start_broadcom_fallback()
+{
+    tty="$1"
+
+    if ! command -v brcm_patchram_plus1 >/dev/null 2>&1; then
+        return 1
+    fi
+
+    killall brcm_patchram_plus1 >/dev/null 2>&1 || true
+    reset_bt_rfkill
+    log "start BT Broadcom attach tty=$tty firmware_dir=$WIFIBT_FIRMWARE_DIR"
+    brcm_patchram_plus1 --enable_hci --no2bytes \
+        --use_baudrate_for_download --tosleep 200000 \
+        --baudrate "${FACTORY_BT_BAUD:-1500000}" \
+        --patchram "$WIFIBT_FIRMWARE_DIR/" "$tty" >> "$LOG_DIR/bluetooth.log" 2>&1 < /dev/null &
+    echo $! > "$RUN_DIR/hciattach.pid"
+}
+
+start_rockchip_fallback()
+{
+    tty="$1"
+
+    if command -v rk_hciattach >/dev/null 2>&1; then
+        attach=rk_hciattach
+        killall rk_hciattach >/dev/null 2>&1 || true
+        reset_bt_rfkill
+        log "start BT Rockchip attach tty=$tty"
+        "$attach" -n -s 115200 "$tty" rockchip 3000000 flow nosleep 11:22:33:44:55:66 >> "$LOG_DIR/bluetooth.log" 2>&1 < /dev/null &
+        echo $! > "$RUN_DIR/hciattach.pid"
+        return 0
+    fi
+
+    return 1
+}
+
+start_realtek_fallback()
+{
+    tty="$1"
+
+    if command -v rtk_hciattach >/dev/null 2>&1; then
+        try_insmod_module hci_uart 1
+        killall rtk_hciattach >/dev/null 2>&1 || true
+        reset_bt_rfkill
+        log "start BT Realtek attach tty=$tty"
+        rtk_hciattach -n -s 115200 "$tty" rtk_h5 >> "$LOG_DIR/bluetooth.log" 2>&1 < /dev/null &
+        echo $! > "$RUN_DIR/hciattach.pid"
+        return 0
+    fi
+
+    return 1
+}
+
+try_insmod_module()
+{
+    module="$1"
+    delay="${2:-0}"
+    if lsmod 2>/dev/null | awk '{print $1}' | grep -qx "$module"; then
+        return 0
+    fi
+    if [ -f "$WIFIBT_MODULE_DIR/$module.ko" ]; then
+        log "insmod BT module $module"
+        insmod "$WIFIBT_MODULE_DIR/$module.ko" >> "$LOG_DIR/bluetooth.log" 2>&1 || return 1
+        sleep "$delay"
+        return 0
+    fi
+    return 1
+}
+
+start_generic_hciattach()
+{
+    if bring_hci0_up; then
+        return 0
+    fi
+
+    if hci0_exists; then
+        log "hci0 exists but is not usable; restart HCI attach"
+    fi
+
+    expose_bluetooth_firmware || true
+    tty="$(bt_tty || true)"
+    if [ -z "$tty" ]; then
+        log "BT tty not found"
+        return 1
+    fi
+
+    attach="${FACTORY_BT_ATTACH:-hciattach}"
+    proto="${FACTORY_BT_PROTO:-qca}"
+    baud="${FACTORY_BT_BAUD:-3000000}"
+    stop_hci_attach
+
+    for attempt in 1 2; do
+        reset_bt_rfkill
+        log "start BT HCI attach attempt=$attempt tty=$tty proto=$proto baud=$baud"
+        "$attach" "$tty" "$proto" "$baud" flow >> "$LOG_DIR/bluetooth.log" 2>&1 < /dev/null &
+        echo $! > "$RUN_DIR/hciattach.pid"
+
+        if wait_for_hci0 10; then
+            return 0
+        fi
+
+        kill_by_pidfile "$RUN_DIR/hciattach.pid"
+        killall "$attach" >/dev/null 2>&1 || true
+        sleep 1
+    done
+
+    return 1
+}
+
+start_hciattach_fallback()
+{
+    if bring_hci0_up; then
+        return 0
+    fi
+
+    if hci0_exists; then
+        log "restart stale hci0 before BT fallback"
+        stop_hci_attach
+    fi
+
+    tty="$(bt_tty || true)"
+    if [ -z "$tty" ]; then
+        log "BT tty not found"
+        return 1
+    fi
+
+    vendor=""
+    if command -v wifibt-vendor >/dev/null 2>&1; then
+        vendor="$(wifibt-vendor 2>/dev/null || true)"
+    fi
+    log "BT fallback vendor=${vendor:-unknown} tty=$tty"
+
+    case "$vendor" in
+        Broadcom)
+            start_broadcom_fallback "$tty" || true
+            ;;
+        Rockchip)
+            start_rockchip_fallback "$tty" || true
+            ;;
+        Realtek)
+            start_realtek_fallback "$tty" || true
+            ;;
+    esac
+
+    if wait_for_hci0 10; then
+        return 0
+    fi
+
+    start_generic_hciattach
 }
 
 find_bluetoothd()
@@ -192,9 +503,16 @@ start_bluetoothd()
 
     log "start bluetoothd args=$args"
     # shellcheck disable=SC2086
-    "$bt" $args >> "$LOG_DIR/bluetoothd.log" 2>&1 &
+    if command -v setsid >/dev/null 2>&1; then
+        setsid "$bt" $args >> "$LOG_DIR/bluetoothd.log" 2>&1 < /dev/null &
+    elif command -v nohup >/dev/null 2>&1; then
+        nohup "$bt" $args >> "$LOG_DIR/bluetoothd.log" 2>&1 < /dev/null &
+    else
+        (trap '' HUP; "$bt" $args >> "$LOG_DIR/bluetoothd.log" 2>&1 < /dev/null) &
+    fi
     echo $! > "$RUN_DIR/bluetoothd.pid"
     sleep 1
+    pidof bluetoothd >/dev/null 2>&1 || log "bluetoothd exited after startup"
 }
 
 bluez_adapter_has_managers()
@@ -251,29 +569,27 @@ init_bluetooth()
         return 0
     fi
 
-    if [ -w /sys/class/rfkill/rfkill0/state ]; then
-        echo 0 > /sys/class/rfkill/rfkill0/state 2>/dev/null || true
-        echo 1 > /sys/class/rfkill/rfkill0/state 2>/dev/null || true
-    fi
+    if ! bring_hci0_up; then
+        if hci0_exists; then
+            log "hci0 exists but cannot be brought up; restart HCI attach"
+            stop_bluetoothd
+            stop_hci_attach
+        fi
 
-    if command -v wifibt-init.sh >/dev/null 2>&1; then
-        wifibt-init.sh start_bt >> "$LOG_DIR/bluetooth.log" 2>&1 || log "wifibt-init start_bt failed"
-    fi
-
-    if ! hciconfig hci0 >/dev/null 2>&1 && [ -e /dev/ttyS4 ]; then
-        if command -v hciattach >/dev/null 2>&1; then
-            hciattach /dev/ttyS4 qca 3000000 flow >> "$LOG_DIR/bluetooth.log" 2>&1 &
-            echo $! > "$RUN_DIR/hciattach.pid"
+        reset_bt_rfkill
+        expose_bluetooth_firmware || true
+        start_wifibt_stack || true
+        if ! wait_for_hci0 20; then
+            start_hciattach_fallback || true
         fi
     fi
 
-    if ! wait_for_hci0 10; then
+    if ! wait_for_hci0 5; then
         log "hci0 not found, skip bluetoothd startup"
         return 0
     fi
 
     if command -v hciconfig >/dev/null 2>&1; then
-        hciconfig hci0 up >> "$LOG_DIR/bluetooth.log" 2>&1 || log "hci0 up failed"
         hciconfig hci0 >> "$LOG_DIR/bluetooth.log" 2>&1 || true
     fi
 
@@ -316,7 +632,7 @@ init_wifi_ap()
     fi
     ifconfig wlan1 192.168.5.1 up 2>/dev/null || true
     if command -v hostapd >/dev/null 2>&1 && [ -f /tmp/wps_hostapd.conf ] && ! pidof hostapd >/dev/null 2>&1; then
-        hostapd -iwlan1 -t /tmp/wps_hostapd.conf >> "$LOG_DIR/hostapd.log" 2>&1 &
+        hostapd -iwlan1 -t /tmp/wps_hostapd.conf >> "$LOG_DIR/hostapd.log" 2>&1 < /dev/null &
         echo $! > "$RUN_DIR/hostapd.pid"
     fi
 }
@@ -329,7 +645,13 @@ start_factory_test()
     fi
 
     log "start factory_test"
-    "$BIN_DIR/factory_test" >> "$LOG_DIR/factory_test.log" 2>&1 &
+    if command -v setsid >/dev/null 2>&1; then
+        setsid "$BIN_DIR/factory_test" >> "$LOG_DIR/factory_test.log" 2>&1 < /dev/null &
+    elif command -v nohup >/dev/null 2>&1; then
+        nohup "$BIN_DIR/factory_test" >> "$LOG_DIR/factory_test.log" 2>&1 < /dev/null &
+    else
+        (trap '' HUP; "$BIN_DIR/factory_test" >> "$LOG_DIR/factory_test.log" 2>&1 < /dev/null) &
+    fi
     echo $! > "$RUN_DIR/factory_test.pid"
 }
 
@@ -358,9 +680,19 @@ start_all()
     log "factory firmware startup done"
 }
 
+start_bluetooth_only()
+{
+    ensure_dirs
+    start_dbus
+    init_bluetooth
+}
+
 case "${1:-start}" in
     start)
         start_all
+        ;;
+    bluetooth)
+        start_bluetooth_only
         ;;
     stop)
         stop_all
@@ -371,7 +703,7 @@ case "${1:-start}" in
         start_all
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart}" >&2
+        echo "Usage: $0 {start|bluetooth|stop|restart}" >&2
         exit 1
         ;;
 esac

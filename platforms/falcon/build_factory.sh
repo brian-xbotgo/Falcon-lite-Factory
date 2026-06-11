@@ -10,6 +10,8 @@ SDK_ROOT="${SDK_DIR:-}"
 SDK_ROOT="${SDK_ROOT%/}"
 BUILD_SDK="${FACTORY_BUILD_SDK:-0}"
 SDK_DRY_RUN="${FACTORY_SDK_DRY_RUN:-0}"
+COPY_SDK_FIRMWARE="${FACTORY_COPY_SDK_FIRMWARE:-0}"
+QCA_BT_FW_MODULE="${FACTORY_QCA_BT_FW_MODULE:-FC64EABMD}"
 FACTORY_REMOVE_INIT_SCRIPTS="
 S90dragonfly
 S50usbdevice
@@ -40,6 +42,63 @@ fi
 log()
 {
     echo "[build_factory] $*"
+}
+
+copy_firmware_tree()
+{
+    local src="$1"
+
+    if [ -d "$src" ]; then
+        log "Copy firmware tree: $src"
+        cp -a "$src/." "$OUTPUT_DIR/lib/firmware/"
+    fi
+}
+
+find_qca_bt_fw_dir()
+{
+    local legacy_root
+    local candidate
+
+    if [ -n "${FACTORY_QCA_BT_FW_DIR:-}" ]; then
+        if [ -f "$FACTORY_QCA_BT_FW_DIR/hpbtfw21.tlv" ]; then
+            echo "$FACTORY_QCA_BT_FW_DIR"
+            return 0
+        fi
+        log "FACTORY_QCA_BT_FW_DIR missing hpbtfw21.tlv: $FACTORY_QCA_BT_FW_DIR" >&2
+    fi
+
+    legacy_root="${FACTORY_LEGACY_FALCON_ROOT:-/home/gdh/falcon/app/lastcode20251210/XbotGo-Dragonfly-Embedded}"
+    for candidate in \
+        "$FW_ROOT/platforms/falcon/firmware/qca/$QCA_BT_FW_MODULE" \
+        "$FW_ROOT/platforms/falcon/firmware/qca" \
+        "$legacy_root/btwifi/drivers/BT/FW/$QCA_BT_FW_MODULE"; do
+        if [ -f "$candidate/hpbtfw21.tlv" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+copy_qca_bt_firmware()
+{
+    local src
+    local file
+
+    src="$(find_qca_bt_fw_dir || true)"
+    if [ -z "$src" ]; then
+        log "QCA BT firmware not found; set FACTORY_QCA_BT_FW_DIR if this board uses hciattach qca"
+        return 0
+    fi
+
+    mkdir -p "$OUTPUT_DIR/lib/firmware/qca"
+    for file in hpbtfw21.tlv hpnv21.bin hpnv21g.bin hpnv21.nvm; do
+        if [ -f "$src/$file" ]; then
+            cp -f "$src/$file" "$OUTPUT_DIR/lib/firmware/qca/"
+        fi
+    done
+    log "Copied QCA BT firmware from $src"
 }
 
 run_cmd()
@@ -151,6 +210,24 @@ install_adb_auth_files()
     fi
 }
 
+install_rootfs_bt_firmware()
+{
+    local rootfs_dir="$1"
+    local src="$OUTPUT_DIR/lib/firmware/qca"
+    local dst="$rootfs_dir/usr/lib/firmware/qca"
+
+    [ -d "$src" ] || return 0
+
+    log "Installing QCA BT firmware into rootfs: $dst"
+    run_cmd mkdir -p "$dst"
+    if [ "$SDK_DRY_RUN" = "1" ]; then
+        log "DRY-RUN copy QCA BT firmware to $dst"
+    else
+        cp -a "$src/." "$dst/"
+        chmod -R u=rwX,go=rX "$dst"
+    fi
+}
+
 install_rootfs_overlay()
 {
     local overlay_dir="$1"
@@ -170,6 +247,11 @@ install_rootfs_overlay()
             mkdir -p "$overlay_dir/etc/profile.d"
             cp -f "$OUTPUT_DIR/etc/profile.d/adbd.sh" "$overlay_dir/etc/profile.d/adbd.sh"
             chmod 644 "$overlay_dir/etc/profile.d/adbd.sh"
+        fi
+        if [ -d "$OUTPUT_DIR/lib/firmware/qca" ]; then
+            mkdir -p "$overlay_dir/usr/lib/firmware/qca"
+            cp -a "$OUTPUT_DIR/lib/firmware/qca/." "$overlay_dir/usr/lib/firmware/qca/"
+            chmod -R u=rwX,go=rX "$overlay_dir/usr/lib/firmware/qca"
         fi
         : > "$overlay_dir/.skip_fsck"
         cat > "$overlay_dir/prepare.sh" <<'EOF'
@@ -302,6 +384,7 @@ integrate_sdk()
     if [ -d "$rootfs_dir" ]; then
         install_init_script "$rootfs_dir"
         install_adb_auth_files "$rootfs_dir"
+        install_rootfs_bt_firmware "$rootfs_dir"
     else
         log "rootfs target not found yet: $rootfs_dir"
     fi
@@ -311,6 +394,7 @@ integrate_sdk()
         if [ -d "$rootfs_dir" ]; then
             install_init_script "$rootfs_dir"
             install_adb_auth_files "$rootfs_dir"
+            install_rootfs_bt_firmware "$rootfs_dir"
             ensure_skip_fsck "$rootfs_dir"
         fi
     else
@@ -327,6 +411,8 @@ mkdir -p "$OUTPUT_DIR/bin" \
          "$OUTPUT_DIR/scripts" \
          "$OUTPUT_DIR/init.d" \
          "$OUTPUT_DIR/lib" \
+         "$OUTPUT_DIR/lib/firmware" \
+         "$OUTPUT_DIR/lib/modules" \
          "$OUTPUT_DIR/libexec/bluetooth" \
          "$OUTPUT_DIR/sdk_patch"
 
@@ -342,7 +428,7 @@ cp -f "$SCRIPT_DIR/init.d/"* "$OUTPUT_DIR/init.d/"
 cp -a "$SCRIPT_DIR/sdk_patch/." "$OUTPUT_DIR/sdk_patch/"
 chmod 755 "$OUTPUT_DIR/scripts/"*.sh "$OUTPUT_DIR/init.d/"* "$OUTPUT_DIR/sdk_patch/"*.sh
 
-for tool in mosquitto dbus-daemon dbus-uuidgen adbd arecord amixer hciattach hciconfig rk_hciattach rtk_hciattach wifibt-init.sh wifibt-util.sh bt-tty wifibt-bus wifibt-chip wifibt-id wifibt-info wifibt-module wifibt-vendor; do
+for tool in mosquitto dbus-daemon dbus-uuidgen adbd arecord amixer brcm_patchram_plus1 btattach hciattach hciconfig rk_hciattach rtk_hciattach wifibt-init.sh wifibt-util.sh bt-tty wifibt-bus wifibt-chip wifibt-id wifibt-info wifibt-module wifibt-vendor; do
     if [ -n "$SDK_TARGET_DIR" ] && [ -f "$SDK_TARGET_DIR/usr/bin/$tool" ]; then
         cp -P "$SDK_TARGET_DIR/usr/bin/$tool" "$OUTPUT_DIR/bin/"
     fi
@@ -393,10 +479,18 @@ for lib in \
     fi
 done
 
-if [ -n "$SDK_TARGET_DIR" ] && [ -f "$SDK_TARGET_DIR/usr/lib/modules/battery.ko" ]; then
-    mkdir -p "$OUTPUT_DIR/lib/modules"
-    cp -f "$SDK_TARGET_DIR/usr/lib/modules/battery.ko" "$OUTPUT_DIR/lib/modules/"
+if [ -n "$SDK_TARGET_DIR" ] && [ -d "$SDK_TARGET_DIR/usr/lib/modules" ]; then
+    find "$SDK_TARGET_DIR/usr/lib/modules" -maxdepth 1 -type f -name '*.ko' \
+        -exec cp -f {} "$OUTPUT_DIR/lib/modules/" \;
 fi
+
+if [ "$COPY_SDK_FIRMWARE" = "1" ] && [ -n "$SDK_TARGET_DIR" ]; then
+    copy_firmware_tree "$SDK_TARGET_DIR/lib/firmware"
+    copy_firmware_tree "$SDK_TARGET_DIR/usr/lib/firmware"
+else
+    log "Skip SDK firmware tree copy; set FACTORY_COPY_SDK_FIRMWARE=1 to include it"
+fi
+copy_qca_bt_firmware
 
 MOTOR_KO="${FACTORY_MOTOR_KO:-$SCRIPT_DIR/sdk_patch/kernel_patch/motor_tmi8152/motor_tmi8152.ko}"
 if [ -f "$MOTOR_KO" ]; then

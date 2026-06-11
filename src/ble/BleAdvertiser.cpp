@@ -2,6 +2,7 @@
 #include "ble/BleConstants.h"
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <string>
@@ -15,9 +16,8 @@ namespace ft {
 
 namespace {
 
-constexpr const char* kFactoryNamePrefix = "Xbt-F-";
-constexpr const char* kDefaultFactoryName = "Xbt-F-000000";
-constexpr size_t kFactoryNameSuffixLen = 6;
+constexpr const char* kFactoryAdvertisementName = "Xbt-F-000000";
+constexpr const char* kDefaultBluetoothInitCmd = "/oem/usr/scripts/factory_start.sh bluetooth";
 
 bool isValidSnText(const std::string& sn)
 {
@@ -73,19 +73,10 @@ std::string currentFactorySn(BleAdvertiser* self)
     return loadLastValidSnFromFile();
 }
 
-std::string factoryBleNameFromSn(const std::string& sn)
-{
-    if (!isValidSnText(sn)) {
-        return kDefaultFactoryName;
-    }
-    return std::string(kFactoryNamePrefix) +
-           sn.substr(sn.size() - kFactoryNameSuffixLen);
-}
-
 std::string currentBleName(BleAdvertiser* self)
 {
     if (self->m_factoryMode) {
-        return factoryBleNameFromSn(currentFactorySn(self));
+        return kFactoryAdvertisementName;
     }
     return self->m_deviceInfo.getBleName();
 }
@@ -126,6 +117,29 @@ bool bluezAdapterReady(GDBusConnection* conn, std::string& detail)
     return hasAdapter && hasGatt && hasAdv;
 }
 
+bool runBluetoothInitHelperOnce()
+{
+    static bool attempted = false;
+    if (attempted) {
+        return false;
+    }
+    attempted = true;
+
+    const char* cmd = std::getenv("FACTORY_BLE_INIT_CMD");
+    if (cmd && (cmd[0] == '\0' || std::strcmp(cmd, "0") == 0)) {
+        LOG("Bluetooth init helper disabled by FACTORY_BLE_INIT_CMD\n");
+        return false;
+    }
+    if (!cmd) {
+        cmd = kDefaultBluetoothInitCmd;
+    }
+
+    LOG("BlueZ not ready; running bluetooth init helper: %s\n", cmd);
+    const int rc = std::system(cmd);
+    LOG("Bluetooth init helper exited rc=%d\n", rc);
+    return rc == 0;
+}
+
 bool waitForBluezAdapterReady(GDBusConnection* conn)
 {
     constexpr int kMaxAttempts = 120;
@@ -137,6 +151,10 @@ bool waitForBluezAdapterReady(GDBusConnection* conn)
             LOG("BlueZ adapter ready: %s has Adapter/GATT/Advertising managers\n",
                 ADAPTER_PATH);
             return true;
+        }
+
+        if (attempt == 1) {
+            runBluetoothInitHelperOnce();
         }
 
         if (attempt == 1 || attempt % 4 == 0) {
@@ -240,11 +258,28 @@ void BleAdvertiser::shutdown()
 
 int BleAdvertiser::setupDbus()
 {
+    auto connect = [this](GError** err) {
+        m_conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, err);
+        return m_conn != nullptr;
+    };
+
     GError* err = nullptr;
-    m_conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, &err);
+    if (connect(&err)) {
+        return 0;
+    }
+
+    LOG("D-Bus connection failed: %s\n", err ? err->message : "unknown error");
+    g_clear_error(&err);
+    runBluetoothInitHelperOnce();
+
+    if (connect(&err)) {
+        return 0;
+    }
+
     if (!m_conn) {
-        LOG("D-Bus connection failed: %s\n", err->message);
-        g_error_free(err);
+        LOG("D-Bus connection failed after bluetooth init: %s\n",
+            err ? err->message : "unknown error");
+        g_clear_error(&err);
         return -1;
     }
     return 0;
@@ -267,6 +302,12 @@ int BleAdvertiser::run()
     }
     const std::string bleName = currentBleName(this);
     LOG("BLE name: %s\n", bleName.c_str());
+    if (m_factoryMode) {
+        const auto sn = currentFactorySn(this);
+        if (isValidSnText(sn)) {
+            std::memcpy(m_cacheSn, sn.data(), SN_LEN);
+        }
+    }
 
     // Set up MQTT → BLE bridge callbacks
     m_mqtt.setPhoneConnectHandler([this](bool connected) {
@@ -275,8 +316,17 @@ int BleAdvertiser::run()
     });
 
     // 3. Setup D-Bus
-    if (setupDbus() != 0) return -1;
-    if (!waitForBluezAdapterReady(m_conn)) return -1;
+    auto failAfterMqtt = [this]() {
+        if (m_conn) {
+            g_object_unref(m_conn);
+            m_conn = nullptr;
+        }
+        m_mqtt.deinit();
+        return -1;
+    };
+
+    if (setupDbus() != 0) return failAfterMqtt();
+    if (!waitForBluezAdapterReady(m_conn)) return failAfterMqtt();
 
     // 4. Wire up GattServer collaborators
     m_gatt.setWifiManager(&m_wifi);
