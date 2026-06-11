@@ -239,7 +239,7 @@ For ADB/remount failures, check:
 ```bash
 adb devices
 tail -f /userdata/logs/factory_rndis.log
-ls /dev/usb-ffs/adb/ep0
+ls /dev/usb-ffs/adb/ep1 /dev/usb-ffs/adb/ep2
 ps | grep adbd
 ```
 

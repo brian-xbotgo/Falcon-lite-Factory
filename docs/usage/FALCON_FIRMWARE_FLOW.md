@@ -274,7 +274,7 @@ adb shell "mount -o remount,rw /device_data" ... no devices/emulators found
 
 ```sh
 tail -f /userdata/logs/factory_rndis.log
-ls /dev/usb-ffs/adb/ep0
+ls /dev/usb-ffs/adb/ep1 /dev/usb-ffs/adb/ep2
 cat /sys/kernel/config/usb_gadget/rockchip/configs/b.1/strings/0x409/configuration
 cat /sys/kernel/config/usb_gadget/rockchip/idProduct
 ps | grep adbd

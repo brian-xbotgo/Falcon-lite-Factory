@@ -139,7 +139,7 @@ start_adbd()
         }
     fi
 
-    if pidof adbd >/dev/null 2>&1 && [ -e "$ADB_FFS_DIR/ep0" ]; then
+    if pidof adbd >/dev/null 2>&1 && [ -e "$ADB_FFS_DIR/ep1" ] && [ -e "$ADB_FFS_DIR/ep2" ]; then
         log "adbd already running"
         return 0
     fi
@@ -160,14 +160,14 @@ start_adbd()
     fi
 
     for _ in 1 2 3 4 5 6 7 8 9 10; do
-        if [ -e "$ADB_FFS_DIR/ep0" ]; then
+        if [ -e "$ADB_FFS_DIR/ep1" ] && [ -e "$ADB_FFS_DIR/ep2" ]; then
             log "adb FunctionFS ready"
             return 0
         fi
         sleep 1
     done
 
-    log "adb FunctionFS ep0 not ready"
+    log "adb FunctionFS endpoints not ready"
     return 1
 }
 
@@ -235,14 +235,20 @@ start_usb()
 
     if mode_has_adb; then
         mkdir -p "$FUNCTION_DIR/ffs.adb"
-        start_adbd || log "adbd init failed"
+        if ! start_adbd; then
+            log "adbd init failed"
+            return 1
+        fi
         ln -s "$FUNCTION_DIR/ffs.adb" "$CONFIG_DIR/f$next_func"
         next_func=$((next_func + 1))
     fi
 
     udc="$(ls /sys/class/udc 2>/dev/null | head -n 1)"
     if [ -n "$udc" ]; then
-        echo "$udc" > "$GADGET_DIR/UDC"
+        if ! echo "$udc" > "$GADGET_DIR/UDC" 2>/dev/null; then
+            log "bind udc=$udc failed"
+            return 1
+        fi
         log "bound udc=$udc mode=$USB_MODE"
     else
         log "no UDC found"
