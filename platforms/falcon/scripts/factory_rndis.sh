@@ -10,6 +10,7 @@ ADB_FFS_DIR=/dev/usb-ffs/adb
 USB_MODE_FILE=/device_data/factory_usb_mode
 RNDIS_IP="${FACTORY_RNDIS_IP:-172.16.110.6}"
 PRODUCT="${FACTORY_USB_PRODUCT:-Factory ADB RNDIS}"
+ADB_RNDIS_PID="${FACTORY_USB_ADB_RNDIS_PID:-0x0006}"
 
 if [ -n "${FACTORY_USB_MODE:-}" ]; then
     USB_MODE="$FACTORY_USB_MODE"
@@ -94,10 +95,10 @@ id_product_for_mode()
             echo 0x0003
             ;;
         adb_rndis|rndis_adb)
-            echo 0x0013
+            echo "$ADB_RNDIS_PID"
             ;;
         *)
-            echo 0x0013
+            echo "$ADB_RNDIS_PID"
             ;;
     esac
 }
@@ -205,7 +206,8 @@ start_usb()
     reset_gadget_links
 
     write_if_exists "$GADGET_DIR/idVendor" "0x2207"
-    write_if_exists "$GADGET_DIR/idProduct" "$(id_product_for_mode)"
+    product_id="$(id_product_for_mode)"
+    write_if_exists "$GADGET_DIR/idProduct" "$product_id"
     write_if_exists "$GADGET_DIR/bcdDevice" "0x0310"
     write_if_exists "$GADGET_DIR/bcdUSB" "0x0200"
     write_if_exists "$GADGET_DIR/bDeviceClass" "239"
@@ -249,7 +251,7 @@ start_usb()
             log "bind udc=$udc failed"
             return 1
         fi
-        log "bound udc=$udc mode=$USB_MODE"
+        log "bound udc=$udc mode=$USB_MODE idProduct=$product_id"
     else
         log "no UDC found"
         return 1
