@@ -259,15 +259,16 @@ usb0=172.16.110.6
 
 ```text
 FACTORY_USB_MODE=adb_rndis
-idProduct=0x0006
+idProduct=0x0013
 ADB FunctionFS=/dev/usb-ffs/adb
 RNDIS interface=usb0
 ```
 
 `adb_rndis` mode still creates both ADB and RNDIS functions. The product ID is
-kept at the Rockchip ADB value `0x0006` so the flashing tool can identify ADB;
-use `FACTORY_USB_ADB_RNDIS_PID=0x0013` only when the old Android composite ID is
-needed for a host-side driver test.
+kept at the Android composite value `0x0013` so the Windows host keeps binding
+RNDIS for factory communication. Use `FACTORY_USB_ADB_RNDIS_PID=0x0006` only as
+a temporary Rockchip flashing-tool diagnostic mode, because it can break RNDIS
+binding on the factory host.
 
 如果上位机报：
 

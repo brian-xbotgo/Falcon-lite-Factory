@@ -216,18 +216,20 @@ advertisement.
 - `FACTORY_ENABLE_BLE=0`: do not start BLE from `factory_test`
 - `FACTORY_ENABLE_RNDIS=0`: skip RNDIS but still start USB as ADB-only
 - `FACTORY_USB_MODE=adb_rndis|adb|rndis`: choose the USB gadget mode
-- `FACTORY_USB_ADB_RNDIS_PID=0x0006`: product ID used by ADB + RNDIS mode
+- `FACTORY_USB_ADB_RNDIS_PID=0x0013`: product ID used by ADB + RNDIS mode
 - `FACTORY_LOAD_MODULES=0`: skip optional kernel module loading
 - `FACTORY_ENABLE_WIFI_AP=1`: start the WiFi AP helper path
 - `FACTORY_RNDIS_IP=172.16.110.6`: override RNDIS IP
 - `FACTORY_LOG_DIR=/userdata/logs`: override log path
 
 The default mode is `adb_rndis` and keeps both ADB and RNDIS enabled. Its
-default `idProduct` is `0x0006`, matching the Rockchip ADB ID expected by the
-flashing tool. To temporarily use the old Android composite ID:
+default `idProduct` is `0x0013`, matching the Android ADB + RNDIS composite ID
+used by the factory host communication path. If the Rockchip flashing tool must
+be tested with the single-ADB ID, use it only as a temporary diagnostic mode
+because some Windows hosts stop binding RNDIS under that ID:
 
 ```bash
-FACTORY_USB_ADB_RNDIS_PID=0x0013 /oem/usr/scripts/factory_rndis.sh restart
+FACTORY_USB_ADB_RNDIS_PID=0x0006 /oem/usr/scripts/factory_rndis.sh restart
 ```
 
 To make the mode persistent:
