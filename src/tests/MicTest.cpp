@@ -3,8 +3,12 @@
 #include "control/GpioController.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include <limits>
 #include <string>
 #include <thread>
 #include <sys/stat.h>
@@ -17,6 +21,52 @@ namespace {
 constexpr uint32_t kGainFail = 1u << 0;
 constexpr uint32_t kRecordFail = 1u << 1;
 constexpr uint32_t kBuzzerFail = 1u << 2;
+constexpr uint32_t kAudioDetectedRmsThreshold = 420000;
+
+struct AudioStats {
+    uint32_t peak = 0;
+    uint32_t rms = 0;
+    uint16_t flags = 0;
+    bool parsed = false;
+};
+
+uint16_t le16(const uint8_t* p)
+{
+    return static_cast<uint16_t>(p[0]) |
+           static_cast<uint16_t>(p[1] << 8);
+}
+
+uint32_t le32(const uint8_t* p)
+{
+    return static_cast<uint32_t>(p[0]) |
+           (static_cast<uint32_t>(p[1]) << 8) |
+           (static_cast<uint32_t>(p[2]) << 16) |
+           (static_cast<uint32_t>(p[3]) << 24);
+}
+
+void appendLe16(std::string& out, uint16_t value)
+{
+    out.push_back(static_cast<char>(value & 0xff));
+    out.push_back(static_cast<char>((value >> 8) & 0xff));
+}
+
+void appendLe32(std::string& out, uint32_t value)
+{
+    out.push_back(static_cast<char>(value & 0xff));
+    out.push_back(static_cast<char>((value >> 8) & 0xff));
+    out.push_back(static_cast<char>((value >> 16) & 0xff));
+    out.push_back(static_cast<char>((value >> 24) & 0xff));
+}
+
+std::string packAudioStats(const AudioStats& stats)
+{
+    std::string out;
+    out.reserve(10);
+    appendLe32(out, stats.peak);
+    appendLe32(out, stats.rms);
+    appendLe16(out, stats.flags);
+    return out;
+}
 
 std::string shellQuote(const std::string& value)
 {
@@ -54,6 +104,104 @@ long long fileSize(const std::string& path)
         return -1;
     }
     return static_cast<long long>(st.st_size);
+}
+
+AudioStats analyzeWav(const std::string& path)
+{
+    AudioStats stats;
+    FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) {
+        std::fprintf(stderr, "[MicTest] wav_stats open failed path=%s\n", path.c_str());
+        return stats;
+    }
+
+    uint8_t header[44] = {};
+    if (std::fread(header, 1, sizeof(header), f) != sizeof(header)) {
+        std::fprintf(stderr, "[MicTest] wav_stats short header path=%s\n", path.c_str());
+        std::fclose(f);
+        return stats;
+    }
+
+    if (std::memcmp(header + 0, "RIFF", 4) != 0 ||
+        std::memcmp(header + 8, "WAVE", 4) != 0 ||
+        std::memcmp(header + 12, "fmt ", 4) != 0 ||
+        std::memcmp(header + 36, "data", 4) != 0) {
+        std::fprintf(stderr, "[MicTest] wav_stats invalid signature path=%s\n", path.c_str());
+        std::fclose(f);
+        return stats;
+    }
+
+    const uint16_t channels = le16(header + 22);
+    const uint16_t bitsPerSample = le16(header + 34);
+    const uint32_t dataSize = le32(header + 40);
+    const uint32_t bytesPerSample = bitsPerSample / 8;
+    if (channels == 0 || bytesPerSample == 0 ||
+        bytesPerSample > sizeof(uint32_t) || dataSize == 0 ||
+        dataSize > 100u * 1024u * 1024u) {
+        std::fprintf(stderr,
+                     "[MicTest] wav_stats invalid layout path=%s channels=%u bits=%u data=%u\n",
+                     path.c_str(), channels, bitsPerSample, dataSize);
+        std::fclose(f);
+        return stats;
+    }
+
+    const uint32_t frameBytes = bytesPerSample * channels;
+    const uint32_t frames = dataSize / frameBytes;
+    if (frameBytes == 0 || frames == 0) {
+        std::fclose(f);
+        return stats;
+    }
+
+    long double sumSq = 0;
+    uint32_t samples = 0;
+    for (uint32_t frame = 0; frame < frames; ++frame) {
+        uint8_t sampleBuf[4] = {};
+        if (std::fread(sampleBuf, 1, bytesPerSample, f) != bytesPerSample) {
+            break;
+        }
+
+        int32_t sample = 0;
+        if (bytesPerSample == 4) {
+            sample = static_cast<int32_t>(le32(sampleBuf));
+        } else if (bytesPerSample == 2) {
+            sample = static_cast<int16_t>(le16(sampleBuf));
+        } else if (bytesPerSample == 1) {
+            sample = (static_cast<int32_t>(sampleBuf[0]) - 128) << 8;
+        }
+
+        const uint32_t absSample = sample < 0
+            ? static_cast<uint32_t>(-(static_cast<int64_t>(sample)))
+            : static_cast<uint32_t>(sample);
+        if (absSample > stats.peak) {
+            stats.peak = absSample;
+        }
+        sumSq += static_cast<long double>(absSample) * absSample;
+        ++samples;
+
+        if (channels > 1) {
+            const long skip = static_cast<long>((channels - 1) * bytesPerSample);
+            if (std::fseek(f, skip, SEEK_CUR) != 0) {
+                break;
+            }
+        }
+    }
+    std::fclose(f);
+
+    if (samples == 0) {
+        return stats;
+    }
+
+    const long double rms = std::sqrt(sumSq / samples);
+    stats.rms = rms > std::numeric_limits<uint32_t>::max()
+        ? std::numeric_limits<uint32_t>::max()
+        : static_cast<uint32_t>(rms);
+    if (stats.rms > kAudioDetectedRmsThreshold) {
+        stats.flags |= 0x0001;
+    }
+    stats.parsed = true;
+    std::fprintf(stderr, "[MicTest] wav_stats path=%s peak=%u rms=%u flags=0x%04x parsed=1\n",
+                 path.c_str(), stats.peak, stats.rms, stats.flags);
+    return stats;
 }
 
 int runCommand(const std::string& tag, const std::string& cmd)
@@ -174,20 +322,32 @@ public:
         if (!wavReady) {
             errorCode |= kRecordFail;
         } else {
+            runCommand("chmod_record_dir", "chmod 755 " + shellQuote(recordDir));
             runCommand("chmod_wav", "chmod 644 " + shellQuote(recordPath));
             ::sync();
         }
 
+        const AudioStats stats = wavReady ? analyzeWav(recordPath) : AudioStats{};
+        const std::string audioStatsPayload = packAudioStats(stats);
+
         if (errorCode != 0) {
             TestResult result = TestResult::fail("mic record failed");
+            result.responseExtra = audioStatsPayload;
             result.data["error_code"] = errorCode;
+            result.data["audio_peak"] = stats.peak;
+            result.data["audio_rms"] = stats.rms;
+            result.data["audio_flags"] = stats.flags;
             return result;
         }
 
         auto result = TestResult::pass();
         result.detail = "mic wav ready";
+        result.responseExtra = audioStatsPayload;
         result.data["record_path"] = recordPath;
         result.data["record_size"] = wavSize;
+        result.data["audio_peak"] = stats.peak;
+        result.data["audio_rms"] = stats.rms;
+        result.data["audio_flags"] = stats.flags;
         return result;
     }
 };

@@ -51,7 +51,8 @@ uint32_t errorCodeFromResult(const TestResult& result)
 }
 
 std::string protocolResponsePayload(const std::string& requestPayload,
-                                    uint32_t errorCode)
+                                    uint32_t errorCode,
+                                    const std::string& responseExtra)
 {
     std::string payload(kResponsePayloadSize, '\0');
     const size_t copyLen = std::min(requestPayload.size(), kRequestPayloadSize);
@@ -61,6 +62,7 @@ std::string protocolResponsePayload(const std::string& requestPayload,
     payload[39] = static_cast<char>((errorCode >> 16) & 0xff);
     payload[40] = static_cast<char>((errorCode >> 8) & 0xff);
     payload[41] = static_cast<char>(errorCode & 0xff);
+    payload.append(responseExtra);
     return payload;
 }
 
@@ -405,7 +407,8 @@ void TestEngine::publishResult(const std::string& topic, const TestResult& resul
         try {
             const auto errorCode = errorCodeFromResult(result);
             const auto answerTopic = answerTopicFor(topic);
-            const auto payload = protocolResponsePayload(requestPayload, errorCode);
+            const auto payload = protocolResponsePayload(requestPayload, errorCode,
+                                                         result.responseExtra);
             const int rc = mosquitto_publish(mqttClient_, nullptr, answerTopic.c_str(),
                                              static_cast<int>(payload.size()),
                                              payload.data(), 2, false);
