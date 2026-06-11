@@ -139,6 +139,111 @@ load_modules()
     done
 }
 
+wait_for_hci0()
+{
+    timeout="${1:-10}"
+    while [ "$timeout" -gt 0 ]; do
+        if hciconfig hci0 >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+        timeout=$((timeout - 1))
+    done
+    return 1
+}
+
+find_bluetoothd()
+{
+    for bt in \
+        "$USR_DIR/libexec/bluetooth/bluetoothd" \
+        /usr/libexec/bluetooth/bluetoothd \
+        /usr/lib/bluetooth/bluetoothd; do
+        if [ -x "$bt" ]; then
+            echo "$bt"
+            return 0
+        fi
+    done
+
+    command -v bluetoothd 2>/dev/null || true
+}
+
+stop_bluetoothd()
+{
+    kill_by_pidfile "$RUN_DIR/bluetoothd.pid"
+    if pidof bluetoothd >/dev/null 2>&1; then
+        log "restart bluetoothd with experimental mode"
+        killall bluetoothd >/dev/null 2>&1 || true
+        sleep 1
+    fi
+}
+
+start_bluetoothd()
+{
+    bt="$(find_bluetoothd)"
+    if [ -z "$bt" ]; then
+        log "bluetoothd not found"
+        return 1
+    fi
+
+    args="-E -n"
+    if [ "${FACTORY_BLUETOOTHD_DEBUG:-0}" = "1" ]; then
+        args="$args -d"
+    fi
+
+    log "start bluetoothd args=$args"
+    # shellcheck disable=SC2086
+    "$bt" $args >> "$LOG_DIR/bluetoothd.log" 2>&1 &
+    echo $! > "$RUN_DIR/bluetoothd.pid"
+    sleep 1
+}
+
+bluez_adapter_has_managers()
+{
+    if command -v gdbus >/dev/null 2>&1; then
+        gdbus introspect --system --dest org.bluez --object-path /org/bluez/hci0 2>/dev/null |
+            grep -q "org.bluez.Adapter1" &&
+        gdbus introspect --system --dest org.bluez --object-path /org/bluez/hci0 2>/dev/null |
+            grep -q "org.bluez.GattManager1" &&
+        gdbus introspect --system --dest org.bluez --object-path /org/bluez/hci0 2>/dev/null |
+            grep -q "org.bluez.LEAdvertisingManager1"
+        return $?
+    fi
+
+    if command -v busctl >/dev/null 2>&1; then
+        busctl --system introspect org.bluez /org/bluez/hci0 2>/dev/null |
+            grep -q "org.bluez.Adapter1" &&
+        busctl --system introspect org.bluez /org/bluez/hci0 2>/dev/null |
+            grep -q "org.bluez.GattManager1" &&
+        busctl --system introspect org.bluez /org/bluez/hci0 2>/dev/null |
+            grep -q "org.bluez.LEAdvertisingManager1"
+        return $?
+    fi
+
+    return 2
+}
+
+wait_bluez_adapter_managers()
+{
+    timeout="${1:-20}"
+    while [ "$timeout" -gt 0 ]; do
+        bluez_adapter_has_managers
+        rc=$?
+        if [ "$rc" -eq 0 ]; then
+            log "BlueZ hci0 Adapter/GATT/Advertising managers ready"
+            return 0
+        fi
+        if [ "$rc" -eq 2 ]; then
+            log "skip BlueZ manager precheck: gdbus/busctl not found"
+            return 0
+        fi
+        sleep 1
+        timeout=$((timeout - 1))
+    done
+
+    log "BlueZ hci0 managers not ready yet; factory_test will keep waiting"
+    return 1
+}
+
 init_bluetooth()
 {
     if [ "${FACTORY_ENABLE_BLE:-1}" = "0" ]; then
@@ -153,7 +258,6 @@ init_bluetooth()
 
     if command -v wifibt-init.sh >/dev/null 2>&1; then
         wifibt-init.sh start_bt >> "$LOG_DIR/bluetooth.log" 2>&1 || log "wifibt-init start_bt failed"
-        sleep 2
     fi
 
     if ! hciconfig hci0 >/dev/null 2>&1 && [ -e /dev/ttyS4 ]; then
@@ -161,7 +265,11 @@ init_bluetooth()
             hciattach /dev/ttyS4 qca 3000000 flow >> "$LOG_DIR/bluetooth.log" 2>&1 &
             echo $! > "$RUN_DIR/hciattach.pid"
         fi
-        sleep 2
+    fi
+
+    if ! wait_for_hci0 10; then
+        log "hci0 not found, skip bluetoothd startup"
+        return 0
     fi
 
     if command -v hciconfig >/dev/null 2>&1; then
@@ -169,20 +277,9 @@ init_bluetooth()
         hciconfig hci0 >> "$LOG_DIR/bluetooth.log" 2>&1 || true
     fi
 
-    if ! pidof bluetoothd >/dev/null 2>&1; then
-        if [ -x "$USR_DIR/libexec/bluetooth/bluetoothd" ]; then
-            "$USR_DIR/libexec/bluetooth/bluetoothd" -n >> "$LOG_DIR/bluetoothd.log" 2>&1 &
-            echo $! > "$RUN_DIR/bluetoothd.pid"
-        elif [ -x /usr/libexec/bluetooth/bluetoothd ]; then
-            /usr/libexec/bluetooth/bluetoothd -n >> "$LOG_DIR/bluetoothd.log" 2>&1 &
-            echo $! > "$RUN_DIR/bluetoothd.pid"
-        elif command -v bluetoothd >/dev/null 2>&1; then
-            bluetoothd -n >> "$LOG_DIR/bluetoothd.log" 2>&1 &
-            echo $! > "$RUN_DIR/bluetoothd.pid"
-        else
-            log "bluetoothd not found"
-        fi
-    fi
+    stop_bluetoothd
+    start_bluetoothd || return 0
+    wait_bluez_adapter_managers 20 || true
 }
 
 start_dbus()

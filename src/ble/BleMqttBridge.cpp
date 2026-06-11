@@ -69,8 +69,11 @@ int BleMqttBridge::init(bool factoryMode, bool waitForSn)
         return -1;
     }
 
-    if (m_factoryMode && waitForSn) {
+    if (m_factoryMode && !waitForSn) {
         loadSnFromFile();
+    }
+
+    if (m_factoryMode && waitForSn) {
         std::unique_lock<std::mutex> lock(m_snMutex);
         while (!m_snValid) {
             LOG("Waiting for 14-byte SN via MQTT topic AZA/sn_pcba before BLE advertising...\n");
@@ -256,20 +259,7 @@ void BleMqttBridge::persistSn(const uint8_t* sn)
 
     mkdir("/device_data", 0755);
     const auto text = snToString(sn);
-    {
-        std::ifstream existing(SN_FILE);
-        std::string line;
-        while (std::getline(existing, line)) {
-            if (!line.empty() && line.back() == '\r') {
-                line.pop_back();
-            }
-            if (line == text) {
-                return;
-            }
-        }
-    }
-
-    std::ofstream out(SN_FILE, std::ios::app);
+    std::ofstream out(SN_FILE, std::ios::trunc);
     if (out.is_open()) {
         out << text << '\n';
     }
@@ -279,6 +269,7 @@ bool BleMqttBridge::loadSnFromFile()
 {
     std::ifstream in(SN_FILE);
     std::string line;
+    std::string lastValid;
     while (std::getline(in, line)) {
         if (!line.empty() && line.back() == '\r') {
             line.pop_back();
@@ -286,10 +277,18 @@ bool BleMqttBridge::loadSnFromFile()
         if (line.size() < SN_LEN) {
             continue;
         }
-        if (updateSn(reinterpret_cast<const uint8_t*>(line.data()), SN_FILE)) {
-            LOG("Loaded SN from %s\n", SN_FILE);
-            return true;
+        if (line.size() > SN_LEN) {
+            line.resize(SN_LEN);
         }
+        if (isValidSn(reinterpret_cast<const uint8_t*>(line.data()))) {
+            lastValid = line;
+        }
+    }
+
+    if (!lastValid.empty() &&
+        updateSn(reinterpret_cast<const uint8_t*>(lastValid.data()), SN_FILE)) {
+        LOG("Loaded SN from %s: %s\n", SN_FILE, lastValid.c_str());
+        return true;
     }
     return false;
 }

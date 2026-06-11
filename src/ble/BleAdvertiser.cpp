@@ -1,7 +1,10 @@
 #include "ble/BleAdvertiser.h"
 #include "ble/BleConstants.h"
+#include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <string>
 #include <unistd.h>
 #include <mosquitto.h>
 #include <arpa/inet.h>
@@ -9,6 +12,147 @@
 #define LOG(fmt, ...) std::fprintf(stderr, "[ble_wifi] " fmt, ##__VA_ARGS__)
 
 namespace ft {
+
+namespace {
+
+constexpr const char* kFactoryNamePrefix = "Xbt-F-";
+constexpr const char* kDefaultFactoryName = "Xbt-F-000000";
+constexpr size_t kFactoryNameSuffixLen = 6;
+
+bool isValidSnText(const std::string& sn)
+{
+    if (sn.size() != SN_LEN) {
+        return false;
+    }
+
+    bool hasNonZero = false;
+    for (unsigned char ch : sn) {
+        if (ch == 0 || ch == 0xff || !std::isalnum(ch)) {
+            return false;
+        }
+        if (ch != '0') {
+            hasNonZero = true;
+        }
+    }
+    return hasNonZero;
+}
+
+std::string snFromBridge(BleAdvertiser* self)
+{
+    uint8_t sn[SN_LEN] = {};
+    self->m_mqtt.getSn(sn);
+    std::string text(reinterpret_cast<const char*>(sn), SN_LEN);
+    return isValidSnText(text) ? text : std::string();
+}
+
+std::string loadLastValidSnFromFile()
+{
+    std::ifstream in(SN_FILE);
+    std::string line;
+    std::string lastValid;
+    while (std::getline(in, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.size() > SN_LEN) {
+            line.resize(SN_LEN);
+        }
+        if (isValidSnText(line)) {
+            lastValid = line;
+        }
+    }
+    return lastValid;
+}
+
+std::string currentFactorySn(BleAdvertiser* self)
+{
+    auto sn = snFromBridge(self);
+    if (!sn.empty()) {
+        return sn;
+    }
+    return loadLastValidSnFromFile();
+}
+
+std::string factoryBleNameFromSn(const std::string& sn)
+{
+    if (!isValidSnText(sn)) {
+        return kDefaultFactoryName;
+    }
+    return std::string(kFactoryNamePrefix) +
+           sn.substr(sn.size() - kFactoryNameSuffixLen);
+}
+
+std::string currentBleName(BleAdvertiser* self)
+{
+    if (self->m_factoryMode) {
+        return factoryBleNameFromSn(currentFactorySn(self));
+    }
+    return self->m_deviceInfo.getBleName();
+}
+
+bool bluezAdapterReady(GDBusConnection* conn, std::string& detail)
+{
+    GError* err = nullptr;
+    GVariant* reply = g_dbus_connection_call_sync(
+        conn,
+        BLUEZ_SERVICE,
+        ADAPTER_PATH,
+        "org.freedesktop.DBus.Introspectable",
+        "Introspect",
+        nullptr,
+        G_VARIANT_TYPE("(s)"),
+        G_DBUS_CALL_FLAGS_NONE,
+        1000,
+        nullptr,
+        &err);
+
+    if (!reply) {
+        detail = err ? err->message : "introspection failed";
+        g_clear_error(&err);
+        return false;
+    }
+
+    const gchar* xml = nullptr;
+    g_variant_get(reply, "(&s)", &xml);
+    const bool hasAdapter = xml && std::strstr(xml, "org.bluez.Adapter1");
+    const bool hasGatt = xml && std::strstr(xml, GATT_MGR_IFACE);
+    const bool hasAdv = xml && std::strstr(xml, ADV_MGR_IFACE);
+    g_variant_unref(reply);
+
+    detail.clear();
+    if (!hasAdapter) detail += " Adapter1";
+    if (!hasGatt) detail += " GattManager1";
+    if (!hasAdv) detail += " LEAdvertisingManager1";
+    return hasAdapter && hasGatt && hasAdv;
+}
+
+bool waitForBluezAdapterReady(GDBusConnection* conn)
+{
+    constexpr int kMaxAttempts = 120;
+    constexpr int kDelayMs = 250;
+
+    std::string detail;
+    for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
+        if (bluezAdapterReady(conn, detail)) {
+            LOG("BlueZ adapter ready: %s has Adapter/GATT/Advertising managers\n",
+                ADAPTER_PATH);
+            return true;
+        }
+
+        if (attempt == 1 || attempt % 4 == 0) {
+            LOG("Waiting for BlueZ adapter managers on %s, missing:%s\n",
+                ADAPTER_PATH, detail.empty() ? " <unknown>" : detail.c_str());
+        }
+        g_usleep(kDelayMs * 1000);
+    }
+
+    LOG("BlueZ adapter managers not ready on %s after %d ms, last missing:%s\n",
+        ADAPTER_PATH, kMaxAttempts * kDelayMs,
+        detail.empty() ? " <unknown>" : detail.c_str());
+    return false;
+}
+
+} // namespace
 
 // ======================== D-Bus XML for LEAdvertisement1 ========================
 static const gchar* g_adv_xml =
@@ -44,7 +188,8 @@ static GVariant* advGetProperty(GDBusConnection*, const gchar*, const gchar*,
     }
 
     if (!g_strcmp0(name, "LocalName")) {
-        return g_variant_new_string("Xbt-F-000000");
+        const auto bleName = currentBleName(self);
+        return g_variant_new_string(bleName.c_str());
     }
 
     if (!g_strcmp0(name, "ManufacturerData")) {
@@ -111,9 +256,7 @@ int BleAdvertiser::run()
     m_factoryMode = true;
     LOG("BLE WiFi Config starting (factory mode)\n");
 
-    // 1. Init BLE name (fixed "Xbt-F-" prefix for phone app discovery)
-    const char* bleName = "Xbt-F-000000";
-    LOG("BLE name: %s\n", bleName);
+    // 1. Init BLE name source
     if (!m_factoryMode) m_deviceInfo.loadDeviceAlias();
 
     // 2. Init MQTT. In factory mode the tester sends a 14-byte SN first; only
@@ -122,6 +265,8 @@ int BleAdvertiser::run()
         LOG("MQTT init failed\n");
         return -1;
     }
+    const std::string bleName = currentBleName(this);
+    LOG("BLE name: %s\n", bleName.c_str());
 
     // Set up MQTT → BLE bridge callbacks
     m_mqtt.setPhoneConnectHandler([this](bool connected) {
@@ -131,6 +276,7 @@ int BleAdvertiser::run()
 
     // 3. Setup D-Bus
     if (setupDbus() != 0) return -1;
+    if (!waitForBluezAdapterReady(m_conn)) return -1;
 
     // 4. Wire up GattServer collaborators
     m_gatt.setWifiManager(&m_wifi);
@@ -147,7 +293,7 @@ int BleAdvertiser::run()
     registerAdvertisement();
 
     // 7. Register GATT with BlueZ
-    m_gatt.setBleName(m_conn, bleName);
+    m_gatt.setBleName(m_conn, bleName.c_str());
     m_gatt.registerWithBlueZ(m_conn);
 
     // 8. Register WiFi state callback
@@ -257,25 +403,11 @@ uint32_t BleAdvertiser::getFirmwareVersion()
 std::vector<uint8_t> BleAdvertiser::buildManufacturerData()
 {
     if (m_factoryMode) {
-        uint8_t sn[SN_LEN] = {};
-        m_mqtt.getSn(sn);
-        // Check if SN is all zeros
-        bool allZero = true;
-        for (int i = 0; i < SN_LEN; i++) { if (sn[i] != 0) { allZero = false; break; } }
-        if (allZero) {
-            // Try reading SN from file
-            FILE* f = fopen(SN_FILE, "r");
-            if (f) {
-                char buf[32] = {};
-                if (fgets(buf, sizeof(buf), f)) {
-                    size_t len = strlen(buf);
-                    while (len > 0 && (buf[len-1] == '\n' || buf[len-1] == '\r')) buf[--len] = '\0';
-                    if (len >= SN_LEN) memcpy(sn, buf, SN_LEN);
-                }
-                fclose(f);
-            }
+        const auto sn = currentFactorySn(this);
+        if (!isValidSnText(sn)) {
+            return {};
         }
-        return std::vector<uint8_t>(sn, sn + SN_LEN);
+        return std::vector<uint8_t>(sn.begin(), sn.end());
     }
 
     // Normal mode: STA_COUNT(4B) + IP(4B) + VERSION(4B) + COLOR(1B) + LIVE(1B) + ALIAS_LEN(1B) + ALIAS(N)
@@ -330,10 +462,10 @@ gboolean BleAdvertiser::onUpdateManufacturerData(gpointer ud)
 
     if (self->m_factoryMode) {
         // Compare SN against cache, skip PropertiesChanged if unchanged
-        uint8_t sn[SN_LEN] = {};
-        self->m_mqtt.getSn(sn);
-        if (memcmp(sn, self->m_cacheSn, SN_LEN) == 0) return G_SOURCE_CONTINUE;
-        memcpy(self->m_cacheSn, sn, SN_LEN);
+        const auto sn = currentFactorySn(self);
+        if (!isValidSnText(sn)) return G_SOURCE_CONTINUE;
+        if (memcmp(sn.data(), self->m_cacheSn, SN_LEN) == 0) return G_SOURCE_CONTINUE;
+        memcpy(self->m_cacheSn, sn.data(), SN_LEN);
         changed = true;
     } else {
         int staCount = self->m_wifi.getStaCount(AP_INTERFACE);
@@ -361,9 +493,9 @@ gboolean BleAdvertiser::onUpdateManufacturerData(gpointer ud)
     GVariantBuilder props;
     g_variant_builder_init(&props, G_VARIANT_TYPE("a{sv}"));
 
-    // LocalName (fixed "Xbt-F-" prefix for phone app discovery)
+    const auto bleName = currentBleName(self);
     g_variant_builder_add(&props, "{sv}", "LocalName",
-                          g_variant_new_string("Xbt-F-000000"));
+                          g_variant_new_string(bleName.c_str()));
 
     // ManufacturerData
     GVariantBuilder ab;
@@ -386,9 +518,10 @@ gboolean BleAdvertiser::onUpdateManufacturerData(gpointer ud)
                       g_variant_builder_end(&props), invalidated), nullptr);
 
     if (self->m_factoryMode && changed) {
+        self->m_gatt.setBleName(self->m_conn, bleName.c_str());
         self->stopAdvertisement();
         self->startAdvertisement();
-        LOG("Factory SN changed, BLE advertisement refreshed\n");
+        LOG("Factory SN changed, BLE advertisement refreshed name=%s\n", bleName.c_str());
     }
 
     return G_SOURCE_CONTINUE;

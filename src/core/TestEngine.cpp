@@ -111,20 +111,7 @@ void persistSnFromPayload(const std::string& requestPayload)
     constexpr const char* kPcbaSnPath = "/device_data/pcba.txt";
     mkdir(kDeviceDataDir, 0755);
 
-    {
-        std::ifstream existing(kPcbaSnPath);
-        std::string line;
-        while (std::getline(existing, line)) {
-            if (!line.empty() && line.back() == '\r') {
-                line.pop_back();
-            }
-            if (trimProtocolText(line) == sn) {
-                return;
-            }
-        }
-    }
-
-    std::ofstream out(kPcbaSnPath, std::ios::app);
+    std::ofstream out(kPcbaSnPath, std::ios::trunc);
     if (out.is_open()) {
         out << sn << '\n';
     }
