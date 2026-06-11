@@ -180,10 +180,28 @@ apply_device_defconfig_patch()
         "$SDK_ROOT/rkbin/bin/rk35/rk3576_usbplug_v1.04.bin"
 }
 
+disable_network_check_in_file()
+{
+    config_file="$1"
+
+    [ -f "$config_file" ] || return 0
+    if grep -q '^RK_NETWORK_CHECK=y' "$config_file"; then
+        sed -i 's/^RK_NETWORK_CHECK=y/# RK_NETWORK_CHECK is not set/' "$config_file"
+        echo "[factory_patch] disabled RK_NETWORK_CHECK in $config_file"
+    fi
+}
+
+disable_active_network_check()
+{
+    disable_network_check_in_file "$SDK_ROOT/output/.config"
+    disable_network_check_in_file "$SDK_ROOT/output/final.env"
+}
+
 apply_kernel_patch
 apply_buildroot_patch
 apply_external_patch
 apply_device_patch
 apply_device_defconfig_patch
+disable_active_network_check
 
 echo "[factory_patch] done"
