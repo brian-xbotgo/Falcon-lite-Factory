@@ -6,9 +6,10 @@
 
 &uart9 {
 	status = "okay";
-	pinctrl-names = "default", "uart";
-	pinctrl-0 = <&uart9_gpio>;
+	pinctrl-names = "default", "uart", "gpio";
+	pinctrl-0 = <&uart9m0_xfer>;
 	pinctrl-1 = <&uart9m0_xfer>;
+	pinctrl-2 = <&uart9_gpio>;
 };
 
 &uart11 {

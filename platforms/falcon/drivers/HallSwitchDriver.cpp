@@ -906,6 +906,12 @@ bool HallSwitchDriver::readAds122u04(float& value)
     if (raw & 0x800000) {
         raw |= 0xff000000;
     }
+    if (raw == 0) {
+        std::fprintf(stderr,
+                     "[HallSwitch] ADS122U04 read invalid raw=0 bytes=0x%02x 0x%02x 0x%02x\n",
+                     rx[off + 0], rx[off + 1], rx[off + 2]);
+        return false;
+    }
 
     value = static_cast<float>(raw) * kAds122VrefVolts / 8388608.0f;
     std::fprintf(stderr,
