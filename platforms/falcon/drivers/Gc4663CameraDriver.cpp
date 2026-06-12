@@ -1,27 +1,79 @@
 #include "drivers/Gc4663CameraDriver.h"
 #include "control/I2cController.h"
 #include "common/ShellUtils.h"
+
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <glob.h>
+#include <sstream>
 
 namespace ft {
 
-// TODO(RK3576): 核对 I2C 总线号、MIPI CSI 接口号、OTP 路径是否与 RK3576 设备树一致
-static constexpr int kCam0Bus = 3, kCam0Addr = 0x29;
-static constexpr int kCam1Bus = 4, kCam1Addr = 0x29;
-static const char* kCam0Otp = "/proc/otp_eeprom-3-50";
-static const char* kCam1Otp = "/proc/otp_eeprom-4-50";
+namespace {
 
-static int camBus(int cam_index) { return (cam_index == 0) ? kCam0Bus : kCam1Bus; }
-static int camAddr(int cam_index) { return (cam_index == 0) ? kCam0Addr : kCam1Addr; }
-static const char* camOtp(int cam_index) { return (cam_index == 0) ? kCam0Otp : kCam1Otp; }
+struct FalconCameraInfo {
+    const char* sensor;
+    int bus;
+    int addr;
+    const char* otp;
+    uint32_t chipId;
+    int chipIdReg;
+    bool idLowByteFirst;
+};
+
+constexpr FalconCameraInfo kCameras[] = {
+    {"gc4663", 4, 0x29, "/proc/otp_eeprom-4-50", 0x4653, 0x03f0, false},
+    {"imx678", 5, 0x1a, "/proc/otp_eeprom-5-50", 0x0884, 0x3046, true},
+};
+
+const FalconCameraInfo& cameraInfo(int camIndex)
+{
+    constexpr int cameraCount = static_cast<int>(sizeof(kCameras) / sizeof(kCameras[0]));
+    if (camIndex < 0 || camIndex >= cameraCount) {
+        return kCameras[0];
+    }
+    return kCameras[camIndex];
+}
+
+std::string toLower(std::string value)
+{
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+}
+
+std::string hexString(uint32_t value)
+{
+    std::ostringstream os;
+    os << "0x" << std::hex << value;
+    return os.str();
+}
+
+uint32_t read16BitSensorId(int bus, int addr, int reg, bool lowByteFirst)
+{
+    int first = I2cController::readRegister(bus, addr, reg);
+    int second = I2cController::readRegister(bus, addr, reg + 1);
+    if (first < 0 || second < 0) {
+        return 0xFFFFFFFF;
+    }
+    first &= 0xff;
+    second &= 0xff;
+    if (lowByteFirst) {
+        return (static_cast<uint32_t>(second) << 8) | static_cast<uint32_t>(first);
+    }
+    return (static_cast<uint32_t>(first) << 8) | static_cast<uint32_t>(second);
+}
+
+} // namespace
 
 bool Gc4663CameraDriver::checkDmesg(const std::string& name)
 {
     std::string cmd = "dmesg | grep -i " + name;
     std::string r = shell_exec(cmd.c_str());
-    return r.find(name) != std::string::npos;
+    return toLower(r).find(toLower(name)) != std::string::npos;
 }
 
 int Gc4663CameraDriver::checkOtpFile(const std::string& path)
@@ -54,31 +106,27 @@ int Gc4663CameraDriver::checkOtpFile(const std::string& path)
 
 CameraProbeResult Gc4663CameraDriver::probe(int cam_index)
 {
+    const auto& cam = cameraInfo(cam_index);
     CameraProbeResult r = {};
-    r.found = checkDmesg("gc4663");
+    r.found = checkDmesg(cam.sensor);
 
-    int bus = camBus(cam_index);
-    int addr = camAddr(cam_index);
-    uint32_t chip = readChipId(bus, addr);
-    r.i2cOk = (chip == 0x4653);
-    r.chipId = (r.i2cOk) ? "0x4653" : "0x" + std::to_string(chip);
+    uint32_t chip = read16BitSensorId(cam.bus, cam.addr, cam.chipIdReg, cam.idLowByteFirst);
+    r.i2cOk = (chip == cam.chipId);
+    r.chipId = hexString(chip);
 
-    r.otpValid = (checkOtpFile(camOtp(cam_index)) == 0);
+    r.otpValid = (checkOtpFile(cam.otp) == 0);
     r.mipiOk = !hasMipiError() && videoNodesExist();
     return r;
 }
 
 bool Gc4663CameraDriver::checkOtp(int cam_index)
 {
-    return checkOtpFile(camOtp(cam_index)) == 0;
+    return checkOtpFile(cameraInfo(cam_index).otp) == 0;
 }
 
 uint32_t Gc4663CameraDriver::readChipId(int bus, int addr)
 {
-    int hi = I2cController::readRegister(bus, addr, 0x03f0);
-    int lo = I2cController::readRegister(bus, addr, 0x03f1);
-    if (hi < 0 || lo < 0) return 0xFFFFFFFF;
-    return (static_cast<uint32_t>(hi) << 8) | static_cast<uint32_t>(lo);
+    return read16BitSensorId(bus, addr, 0x03f0, false);
 }
 
 bool Gc4663CameraDriver::hasMipiError()

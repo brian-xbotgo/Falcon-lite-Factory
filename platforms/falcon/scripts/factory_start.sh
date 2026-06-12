@@ -7,6 +7,7 @@ BIN_DIR="$USR_DIR/bin"
 CONF_DIR="$USR_DIR/conf"
 SCRIPT_DIR="$USR_DIR/scripts"
 LIB_DIR="$USR_DIR/lib"
+IQ_DIR="$USR_DIR/iqfiles"
 LOG_DIR="${FACTORY_LOG_DIR:-/userdata/logs}"
 RUN_DIR=/var/run/factory_fw
 FACTORY_FLAG=/userdata/factory_mode
@@ -665,9 +666,12 @@ start_rkaiq()
         return 0
     fi
 
+    iq_dir="$IQ_DIR"
+    [ -d "$iq_dir" ] || iq_dir=/etc/iqfiles
+
     cleanup_rkaiq_ipc
-    log "start rkaiq_3A_server"
-    "$rkaiq_bin" -a /etc/iqfiles >> "$LOG_DIR/rkaiq_3A_server.log" 2>&1 < /dev/null &
+    log "start rkaiq_3A_server iq_dir=$iq_dir"
+    "$rkaiq_bin" -a "$iq_dir" >> "$LOG_DIR/rkaiq_3A_server.log" 2>&1 < /dev/null &
     echo $! > "$RUN_DIR/rkaiq_3A_server.pid"
     sleep 2
 }

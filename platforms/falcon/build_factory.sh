@@ -414,6 +414,7 @@ mkdir -p "$OUTPUT_DIR/bin" \
          "$OUTPUT_DIR/lib/firmware" \
          "$OUTPUT_DIR/lib/modules" \
          "$OUTPUT_DIR/libexec/bluetooth" \
+         "$OUTPUT_DIR/iqfiles" \
          "$OUTPUT_DIR/sdk_patch"
 
 cp -f "$BUILD_DIR/factory_test" "$OUTPUT_DIR/bin/"
@@ -421,6 +422,9 @@ cp -f "$BUILD_DIR/factory_test" "$OUTPUT_DIR/bin/"
 cp -f "$SCRIPT_DIR/platform.json" "$OUTPUT_DIR/conf/"
 cp -f "$SCRIPT_DIR/tests.json" "$OUTPUT_DIR/conf/"
 cp -f "$SCRIPT_DIR/conf/"* "$OUTPUT_DIR/conf/"
+if [ -d "$SCRIPT_DIR/iqfiles" ]; then
+    cp -a "$SCRIPT_DIR/iqfiles/." "$OUTPUT_DIR/iqfiles/"
+fi
 copy_lvgl_resources
 
 cp -f "$SCRIPT_DIR/scripts/"* "$OUTPUT_DIR/scripts/"

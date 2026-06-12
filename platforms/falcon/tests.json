@@ -18,7 +18,7 @@
     { "topic": "24R", "module": "battery",    "enabled": true,  "order": 15, "async": false },
     { "topic": "26R", "module": "sys",        "enabled": true,  "order": 16, "async": true  },
     { "topic": "27R", "module": "hall",       "enabled": true,  "order": 17, "async": true,  "params": { "mode": "horizontal_voltage", "move_angle": 420, "move_direct": "forward" } },
-    { "topic": "28R", "module": "camera",     "enabled": true,  "order": 18, "async": true  },
+    { "topic": "28R", "module": "camera",     "enabled": true,  "order": 18, "async": true,  "params": { "cam_index": 0 } },
     { "topic": "291R", "module": "motor",     "enabled": true,  "order": 19, "async": true,  "params": { "mode": "loop", "direction": "vertical" } },
     { "topic": "292R", "module": "motor",     "enabled": true,  "order": 20, "async": true,  "params": { "mode": "loop", "direction": "horizontal" } },
     { "topic": "293R", "module": "motor",     "enabled": true,  "order": 21, "async": false, "params": { "mode": "stop", "direction": "vertical" } },

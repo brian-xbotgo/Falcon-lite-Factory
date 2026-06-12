@@ -130,6 +130,15 @@ bool videoNodeReady(const std::string& node)
     return runShell(cmd.c_str()) == 0;
 }
 
+const char* factoryIqDir()
+{
+    const char* iqDir = firstExistingPath({
+        "/oem/usr/iqfiles",
+        "/etc/iqfiles",
+    });
+    return iqDir[0] != '\0' ? iqDir : "/etc/iqfiles";
+}
+
 void ensureRkaiqReady(const RecorderConfig& cfg)
 {
     const char* rkaiq = firstExistingPath({
@@ -143,7 +152,7 @@ void ensureRkaiqReady(const RecorderConfig& cfg)
 
     if (runShell("pidof rkaiq_3A_server >/dev/null 2>&1") != 0) {
         cleanupRkaiqIpc();
-        const char* iqDir = "/etc/iqfiles";
+        const char* iqDir = factoryIqDir();
         std::string cmd = std::string("nohup ") + rkaiq + " -a " + iqDir +
             " >/userdata/logs/rkaiq_3A_server.log 2>&1 &";
         std::fprintf(stderr, "[Rk3576Recorder] start rkaiq cmd=%s\n", cmd.c_str());
