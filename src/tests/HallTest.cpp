@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cmath>
 #include <limits>
 #include <string>
 #include <thread>
@@ -260,24 +261,29 @@ private:
             "sample_interval_ms", hallConfigInt(root, "sample_interval_ms", 50));
         const float minVoltageExpect = hallConfigFloat(root, "min_voltage", 1.6f);
         const float maxVoltageExpect = hallConfigFloat(root, "max_voltage", 2.0f);
+        const float minAbsMtExpect = hallConfigFloat(root, "min_abs_mt", 15.0f);
         const float moveAngle = ctx.params().value("move_angle", 420.0f);
         const auto direct = parseDirect(ctx.params().value("move_direct",
                                                            std::string("forward")));
+        const bool useMillitesla = hall->valueIsMillitesla();
+        const char* unit = hall->valueUnit();
 
         auto motor = ctx.create<IMotorDriver>();
         bool motorStarted = false;
         if (motor && motor->init()) {
             motorStarted = motor->move(MOTOR_HORIZONTAL, moveAngle, SPEED_MID, direct);
             std::fprintf(stderr,
-                         "[HallTest] horizontal_voltage motor angle=%.1f direct=%s started=%d\n",
-                         moveAngle, directName(direct), motorStarted ? 1 : 0);
+                         "[HallTest] horizontal_voltage motor angle=%.1f direct=%s started=%d unit=%s\n",
+                         moveAngle, directName(direct), motorStarted ? 1 : 0, unit);
         } else {
             std::fprintf(stderr,
-                         "[HallTest] horizontal_voltage motor unavailable, sampling static voltage\n");
+                         "[HallTest] horizontal_voltage motor unavailable, sampling static value unit=%s\n",
+                         unit);
         }
 
-        float minVoltage = std::numeric_limits<float>::max();
-        float maxVoltage = std::numeric_limits<float>::lowest();
+        float minValue = std::numeric_limits<float>::max();
+        float maxValue = std::numeric_limits<float>::lowest();
+        float maxAbsValue = 0.0f;
         int validSamples = 0;
         const int boundedSamples = std::max(1, sampleCount);
         const int boundedIntervalMs = std::max(0, sampleIntervalMs);
@@ -285,8 +291,9 @@ private:
         for (int i = 0; i < boundedSamples; ++i) {
             const float value = hall->readValue();
             if (value < 1000.0f) {
-                minVoltage = std::min(minVoltage, value);
-                maxVoltage = std::max(maxVoltage, value);
+                minValue = std::min(minValue, value);
+                maxValue = std::max(maxValue, value);
+                maxAbsValue = std::max(maxAbsValue, std::fabs(value));
                 ++validSamples;
             }
             if (boundedIntervalMs > 0) {
@@ -304,25 +311,45 @@ private:
         uint32_t errorCode = 0;
         if (validSamples == 0) {
             errorCode |= kHallReadFail;
-            minVoltage = 0.0f;
-            maxVoltage = 0.0f;
-        } else {
-            if (maxVoltage < maxVoltageExpect) {
+            minValue = 0.0f;
+            maxValue = 0.0f;
+            maxAbsValue = 0.0f;
+        } else if (useMillitesla) {
+            if (maxAbsValue < minAbsMtExpect) {
                 errorCode |= kHallMaxVoltageFail;
             }
-            if (minVoltage < minVoltageExpect) {
+        } else {
+            if (maxValue < maxVoltageExpect) {
+                errorCode |= kHallMaxVoltageFail;
+            }
+            if (minValue < minVoltageExpect) {
                 errorCode |= kHallMinVoltageFail;
             }
         }
 
-        std::fprintf(stderr,
-                     "[HallTest] horizontal_voltage samples=%d/%d min=%.4fV expect_min>=%.4fV max=%.4fV expect_max>=%.4fV motor_started=%d result=%s error_code=0x%08x\n",
-                     validSamples, boundedSamples,
-                     minVoltage, minVoltageExpect,
-                     maxVoltage, maxVoltageExpect,
-                     motorStarted ? 1 : 0,
-                     errorCode == 0 ? "PASS" : "FAIL",
-                     errorCode);
+        if (useMillitesla) {
+            std::fprintf(stderr,
+                         "[HallTest] horizontal_voltage samples=%d/%d min=%.4f%s max=%.4f%s max_abs=%.4f%s expect_abs>=%.4f%s motor_started=%d result=%s error_code=0x%08x\n",
+                         validSamples, boundedSamples,
+                         minValue, unit,
+                         maxValue, unit,
+                         maxAbsValue, unit,
+                         minAbsMtExpect, unit,
+                         motorStarted ? 1 : 0,
+                         errorCode == 0 ? "PASS" : "FAIL",
+                         errorCode);
+        } else {
+            std::fprintf(stderr,
+                         "[HallTest] horizontal_voltage samples=%d/%d min=%.4f%s expect_min>=%.4f%s max=%.4f%s expect_max>=%.4f%s motor_started=%d result=%s error_code=0x%08x\n",
+                         validSamples, boundedSamples,
+                         minValue, unit,
+                         minVoltageExpect, unit,
+                         maxValue, unit,
+                         maxVoltageExpect, unit,
+                         motorStarted ? 1 : 0,
+                         errorCode == 0 ? "PASS" : "FAIL",
+                         errorCode);
+        }
 
         return resultWithCode(errorCode == 0, errorCode,
                               errorCode == 0 ? "" : "hall voltage failed");

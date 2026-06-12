@@ -24,11 +24,14 @@
       "bus": 3,
       "bus_candidates": [3, 2, 0, 1, 4, 5, 6, 7, 8, 9],
       "addr": "0x48",
+      "kth_addr": "0x6a",
+      "kth_bus_candidates": [0, 1, 2, 3, 4, 5, 6],
       "uart_candidates": ["/dev/ttyS9", "/dev/ttyS11"],
       "sample_count": 120,
-      "sample_interval_ms": 50,
+      "sample_interval_ms": 100,
       "min_voltage": 1.6,
-      "max_voltage": 2.0
+      "max_voltage": 2.0,
+      "min_abs_mt": 15.0
     }
   },
   "battery": {

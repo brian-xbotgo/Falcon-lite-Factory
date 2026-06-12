@@ -9,6 +9,8 @@ public:
     virtual void deinit() = 0;
     virtual float readValue() = 0;
     virtual bool isInitialized() const = 0;
+    virtual const char* valueUnit() const { return "V"; }
+    virtual bool valueIsMillitesla() const { return false; }
 };
 
 } // namespace ft

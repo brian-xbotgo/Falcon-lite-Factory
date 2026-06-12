@@ -43,6 +43,11 @@ constexpr uint8_t kAdsConfig3 = 0x00;
 constexpr uint8_t kAdsConfig4 = 0x00;
 constexpr float kAds122VrefVolts = 3.3f;
 
+constexpr uint8_t kKthExitModeCmd = 0x80;
+constexpr uint8_t kKthModeCmd = 0x18;
+constexpr uint8_t kKthReadReg = 0x48;
+constexpr int kKthRawToMillitesla = 90;
+
 std::string lowerCopy(std::string value)
 {
     std::transform(value.begin(), value.end(), value.begin(),
@@ -112,6 +117,28 @@ HallSwitchDriver::Config HallSwitchDriver::parseConfig(const nlohmann::json& roo
         if (hall.contains("addr")) {
             cfg.addr = parseIntValue(hall.at("addr"), cfg.addr);
         }
+        if (hall.contains("kth_addr")) {
+            cfg.kthAddr = parseIntValue(hall.at("kth_addr"), cfg.kthAddr);
+        }
+        if (hall.contains("kth_bus")) {
+            const int kthBus = parseIntValue(hall.at("kth_bus"), -1);
+            if (kthBus >= 0) {
+                cfg.kthBusCandidates.insert(cfg.kthBusCandidates.begin(), kthBus);
+            }
+        }
+        if (hall.contains("kth_bus_candidates") &&
+            hall.at("kth_bus_candidates").is_array()) {
+            cfg.kthBusCandidates.clear();
+            for (const auto& item : hall.at("kth_bus_candidates")) {
+                const int bus = parseIntValue(item, -1);
+                if (bus >= 0 &&
+                    std::find(cfg.kthBusCandidates.begin(),
+                              cfg.kthBusCandidates.end(), bus) ==
+                        cfg.kthBusCandidates.end()) {
+                    cfg.kthBusCandidates.push_back(bus);
+                }
+            }
+        }
         if (hall.contains("uart") && hall.at("uart").is_string()) {
             cfg.uartCandidates.clear();
             cfg.uartCandidates.push_back(hall.at("uart").get<std::string>());
@@ -143,6 +170,9 @@ HallSwitchDriver::Config HallSwitchDriver::parseConfig(const nlohmann::json& roo
         if (hall.contains("max_voltage")) {
             cfg.maxVoltage = parseFloatValue(hall.at("max_voltage"), cfg.maxVoltage);
         }
+        if (hall.contains("min_abs_mt")) {
+            cfg.minAbsMt = parseFloatValue(hall.at("min_abs_mt"), cfg.minAbsMt);
+        }
     } catch (...) {
     }
 
@@ -155,6 +185,9 @@ HallSwitchDriver::Config HallSwitchDriver::parseConfig(const nlohmann::json& roo
     }
     if (cfg.busCandidates.empty()) {
         cfg.busCandidates.push_back(cfg.bus);
+    }
+    if (cfg.kthBusCandidates.empty()) {
+        cfg.kthBusCandidates.push_back(0);
     }
     if (cfg.uartCandidates.empty()) {
         cfg.uartCandidates.push_back("/dev/ttyS9");
@@ -188,11 +221,18 @@ bool HallSwitchDriver::init()
     if (config_.driver == "ads122u04") {
         return initAds122u04();
     }
+    if (config_.driver == "kth3601") {
+        return initKth3601();
+    }
     if (config_.driver == "auto") {
         if (initAds1110()) {
             return true;
         }
-        std::fprintf(stderr, "[HallSwitch] ADS1110 unavailable, trying ADS122U04 UART\n");
+        std::fprintf(stderr, "[HallSwitch] ADS1110 unavailable, trying KTH3601 I2C\n");
+        if (initKth3601()) {
+            return true;
+        }
+        std::fprintf(stderr, "[HallSwitch] KTH3601 unavailable, trying ADS122U04 UART\n");
         return initAds122u04();
     }
 
@@ -301,11 +341,18 @@ float HallSwitchDriver::readValue()
         ok = readAds1110(value);
     } else if (activeDriver_ == ActiveDriver::Ads122u04) {
         ok = readAds122u04(value);
+    } else if (activeDriver_ == ActiveDriver::Kth3601) {
+        ok = readKth3601(value);
     }
     if (!ok) {
         return kInvalidHallValue;
     }
     return value;
+}
+
+const char* HallSwitchDriver::valueUnit() const
+{
+    return activeDriver_ == ActiveDriver::Kth3601 ? "mT" : "V";
 }
 
 bool HallSwitchDriver::readAds1110(float& value)
@@ -356,6 +403,185 @@ bool HallSwitchDriver::readAds1110(float& value)
     std::fprintf(stderr,
                  "[HallSwitch] ADS1110 read raw=%d voltage=%.4fV status=0x%02x\n",
                  code, value, buffer[2]);
+    return true;
+}
+
+uint8_t HallSwitchDriver::kth3601Crc(const uint8_t data[4])
+{
+    static constexpr uint8_t kCrcTable[256] = {
+        0x00, 0x07, 0x0e, 0x09, 0x1c, 0x1b, 0x12, 0x15,
+        0x38, 0x3f, 0x36, 0x31, 0x24, 0x23, 0x2a, 0x2d,
+        0x70, 0x77, 0x7e, 0x79, 0x6c, 0x6b, 0x62, 0x65,
+        0x48, 0x4f, 0x46, 0x41, 0x54, 0x53, 0x5a, 0x5d,
+        0xe0, 0xe7, 0xee, 0xe9, 0xfc, 0xfb, 0xf2, 0xf5,
+        0xd8, 0xdf, 0xd6, 0xd1, 0xc4, 0xc3, 0xca, 0xcd,
+        0x90, 0x97, 0x9e, 0x99, 0x8c, 0x8b, 0x82, 0x85,
+        0xa8, 0xaf, 0xa6, 0xa1, 0xb4, 0xb3, 0xba, 0xbd,
+        0xc7, 0xc0, 0xc9, 0xce, 0xdb, 0xdc, 0xd5, 0xd2,
+        0xff, 0xf8, 0xf1, 0xf6, 0xe3, 0xe4, 0xed, 0xea,
+        0xb7, 0xb0, 0xb9, 0xbe, 0xab, 0xac, 0xa5, 0xa2,
+        0x8f, 0x88, 0x81, 0x86, 0x93, 0x94, 0x9d, 0x9a,
+        0x27, 0x20, 0x29, 0x2e, 0x3b, 0x3c, 0x35, 0x32,
+        0x1f, 0x18, 0x11, 0x16, 0x03, 0x04, 0x0d, 0x0a,
+        0x57, 0x50, 0x59, 0x5e, 0x4b, 0x4c, 0x45, 0x42,
+        0x6f, 0x68, 0x61, 0x66, 0x73, 0x74, 0x7d, 0x7a,
+        0x89, 0x8e, 0x87, 0x80, 0x95, 0x92, 0x9b, 0x9c,
+        0xb1, 0xb6, 0xbf, 0xb8, 0xad, 0xaa, 0xa3, 0xa4,
+        0xf9, 0xfe, 0xf7, 0xf0, 0xe5, 0xe2, 0xeb, 0xec,
+        0xc1, 0xc6, 0xcf, 0xc8, 0xdd, 0xda, 0xd3, 0xd4,
+        0x69, 0x6e, 0x67, 0x60, 0x75, 0x72, 0x7b, 0x7c,
+        0x51, 0x56, 0x5f, 0x58, 0x4d, 0x4a, 0x43, 0x44,
+        0x19, 0x1e, 0x17, 0x10, 0x05, 0x02, 0x0b, 0x0c,
+        0x21, 0x26, 0x2f, 0x28, 0x3d, 0x3a, 0x33, 0x34,
+        0x4e, 0x49, 0x40, 0x47, 0x52, 0x55, 0x5c, 0x5b,
+        0x76, 0x71, 0x78, 0x7f, 0x6a, 0x6d, 0x64, 0x63,
+        0x3e, 0x39, 0x30, 0x37, 0x22, 0x25, 0x2c, 0x2b,
+        0x06, 0x01, 0x08, 0x0f, 0x1a, 0x1d, 0x14, 0x13,
+        0xae, 0xa9, 0xa0, 0xa7, 0xb2, 0xb5, 0xbc, 0xbb,
+        0x96, 0x91, 0x98, 0x9f, 0x8a, 0x8d, 0x84, 0x83,
+        0xde, 0xd9, 0xd0, 0xd7, 0xc2, 0xc5, 0xcc, 0xcb,
+        0xe6, 0xe1, 0xe8, 0xef, 0xfa, 0xfd, 0xf4, 0xf3,
+    };
+
+    uint8_t crcData[8] = {};
+    crcData[6] = data[1];
+    crcData[7] = data[2];
+
+    uint8_t crc = 0;
+    for (uint8_t item : crcData) {
+        crc = kCrcTable[crc ^ item];
+    }
+    return static_cast<uint8_t>(crc ^ 0x55);
+}
+
+bool HallSwitchDriver::initKth3601()
+{
+    std::vector<int> candidates = config_.kthBusCandidates;
+    for (int bus : candidates) {
+        if (initKth3601OnBus(bus)) {
+            return true;
+        }
+    }
+
+    std::fprintf(stderr,
+                 "[HallSwitch] KTH3601 init failed addr=0x%02x candidates=%zu\n",
+                 config_.kthAddr, candidates.size());
+    return false;
+}
+
+bool HallSwitchDriver::initKth3601OnBus(int bus)
+{
+    const auto path = busPath(bus);
+    int fd = ::open(path.c_str(), O_RDWR);
+    if (fd < 0) {
+        std::fprintf(stderr, "[HallSwitch] open %s failed: %s\n",
+                     path.c_str(), std::strerror(errno));
+        return false;
+    }
+
+    auto writeByte = [&](uint8_t value, int retryDelayUs) {
+        struct i2c_msg msg {};
+        msg.addr = static_cast<uint16_t>(config_.kthAddr);
+        msg.flags = 0;
+        msg.len = 1;
+        msg.buf = &value;
+
+        struct i2c_rdwr_ioctl_data msgset {};
+        msgset.msgs = &msg;
+        msgset.nmsgs = 1;
+
+        for (int retry = 0; retry < 3; ++retry) {
+            if (::ioctl(fd, I2C_RDWR, &msgset) >= 0) {
+                return true;
+            }
+            if (retry < 2) {
+                ::usleep(retryDelayUs);
+            }
+        }
+        std::fprintf(stderr,
+                     "[HallSwitch] KTH3601 write bus=%d addr=0x%02x cmd=0x%02x failed err=%s\n",
+                     bus, config_.kthAddr, value, std::strerror(errno));
+        return false;
+    };
+
+    if (!writeByte(kKthExitModeCmd, 100000)) {
+        ::close(fd);
+        return false;
+    }
+    ::usleep(500000);
+
+    if (!writeByte(kKthModeCmd, 100000)) {
+        ::close(fd);
+        return false;
+    }
+    ::usleep(200000);
+
+    fd_ = fd;
+    config_.bus = bus;
+    initialized_ = true;
+    activeDriver_ = ActiveDriver::Kth3601;
+    activePath_ = path;
+    std::fprintf(stderr,
+                 "[HallSwitch] initialized driver=KTH3601 bus=%d addr=0x%02x sample_count=%d interval_ms=%d min_abs=%.3fmT\n",
+                 config_.bus, config_.kthAddr, config_.sampleCount,
+                 config_.sampleIntervalMs, config_.minAbsMt);
+    return true;
+}
+
+bool HallSwitchDriver::readKth3601(float& value)
+{
+    if (fd_ < 0) {
+        std::fprintf(stderr, "[HallSwitch] KTH3601 read failed: fd invalid\n");
+        return false;
+    }
+
+    uint8_t reg = kKthReadReg;
+    uint8_t buffer[4] = {};
+    struct i2c_msg msgs[2] {};
+    msgs[0].addr = static_cast<uint16_t>(config_.kthAddr);
+    msgs[0].flags = 0;
+    msgs[0].len = 1;
+    msgs[0].buf = &reg;
+    msgs[1].addr = static_cast<uint16_t>(config_.kthAddr);
+    msgs[1].flags = I2C_M_RD;
+    msgs[1].len = sizeof(buffer);
+    msgs[1].buf = buffer;
+
+    struct i2c_rdwr_ioctl_data msgset {};
+    msgset.msgs = msgs;
+    msgset.nmsgs = 2;
+
+    int retry = 0;
+    for (; retry < 3; ++retry) {
+        if (::ioctl(fd_, I2C_RDWR, &msgset) >= 0) {
+            break;
+        }
+        if (retry < 2) {
+            ::usleep(10000);
+        }
+    }
+
+    if (retry >= 3) {
+        std::fprintf(stderr,
+                     "[HallSwitch] KTH3601 read failed bus=%d addr=0x%02x reg=0x%02x err=%s\n",
+                     config_.bus, config_.kthAddr, reg, std::strerror(errno));
+        return false;
+    }
+
+    const uint8_t crc = kth3601Crc(buffer);
+    if (crc != buffer[3]) {
+        std::fprintf(stderr,
+                     "[HallSwitch] KTH3601 crc failed bytes=0x%02x 0x%02x 0x%02x 0x%02x calc=0x%02x\n",
+                     buffer[0], buffer[1], buffer[2], buffer[3], crc);
+        return false;
+    }
+
+    const int16_t raw = static_cast<int16_t>(
+        (static_cast<uint16_t>(buffer[1]) << 8) | buffer[2]);
+    value = static_cast<float>(raw) / static_cast<float>(kKthRawToMillitesla);
+    std::fprintf(stderr,
+                 "[HallSwitch] KTH3601 read raw=%d value=%.4fmT bytes=0x%02x 0x%02x 0x%02x 0x%02x\n",
+                 raw, value, buffer[0], buffer[1], buffer[2], buffer[3]);
     return true;
 }
 

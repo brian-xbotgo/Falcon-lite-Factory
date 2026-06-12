@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "description": "Falcon factory aging recorder configuration",
+  "audio": {
+    "enabled": true,
+    "device": "hw:0,0",
+    "sample_rate": 16000,
+    "channels": 1,
+    "gain_db": 30
+  },
+  "cameras": [
+    {
+      "device": "/dev/video22",
+      "width": 1280,
+      "height": 720,
+      "format": "NV12",
+      "fps": 30,
+      "output": "/userdata/cam0_output.mp4",
+      "buffer_count": 4
+    },
+    {
+      "device": "/dev/video31",
+      "width": 1280,
+      "height": 720,
+      "format": "NV12",
+      "fps": 30,
+      "output": "/userdata/cam1_output.mp4",
+      "buffer_count": 4
+    }
+  ],
+  "max_duration_sec": 0
+}

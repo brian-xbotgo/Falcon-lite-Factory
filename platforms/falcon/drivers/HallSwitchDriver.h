@@ -16,12 +16,15 @@ public:
     void deinit() override;
     float readValue() override;
     bool isInitialized() const override { return initialized_; }
+    const char* valueUnit() const override;
+    bool valueIsMillitesla() const override { return activeDriver_ == ActiveDriver::Kth3601; }
 
 private:
     enum class ActiveDriver {
         None,
         Ads1110,
         Ads122u04,
+        Kth3601,
     };
 
     struct Config {
@@ -29,11 +32,14 @@ private:
         int bus = 3;
         std::vector<int> busCandidates = {3, 2, 0, 1, 4, 5, 6, 7, 8, 9};
         int addr = 0x48;
+        int kthAddr = 0x6a;
+        std::vector<int> kthBusCandidates = {0, 1, 2, 3, 4, 5, 6};
         std::vector<std::string> uartCandidates = {"/dev/ttyS9", "/dev/ttyS11"};
         int sampleCount = 120;
         int sampleIntervalMs = 50;
         float minVoltage = 1.6f;
         float maxVoltage = 2.0f;
+        float minAbsMt = 15.0f;
     };
 
     bool initAds1110();
@@ -47,6 +53,10 @@ private:
     bool ads122SendCmd(uint8_t cmd);
     int ads122SendRecv(const uint8_t* tx, size_t txLen,
                        uint8_t* rx, size_t rxLen, int timeoutMs);
+    bool initKth3601();
+    bool initKth3601OnBus(int bus);
+    bool readKth3601(float& value);
+    static uint8_t kth3601Crc(const uint8_t data[4]);
     static std::string busPath(int bus);
     static uint64_t monotonicMs();
     static int parseIntValue(const nlohmann::json& value, int fallback);

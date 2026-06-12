@@ -620,6 +620,29 @@ start_dbus()
     fi
 }
 
+start_nginx()
+{
+    if pidof nginx >/dev/null 2>&1; then
+        return 0
+    fi
+
+    conf="$CONF_DIR/nginx_factory.conf"
+    [ -f "$conf" ] || conf=/etc/nginx/nginx.conf
+
+    if [ -x "$BIN_DIR/nginx" ]; then
+        nginx_bin="$BIN_DIR/nginx"
+    elif command -v nginx >/dev/null 2>&1; then
+        nginx_bin="$(command -v nginx)"
+    else
+        log "nginx not found"
+        return 0
+    fi
+
+    mkdir -p /userdata/prod /userdata/record /var/log/nginx /var/tmp/nginx
+    log "start nginx conf=$conf"
+    "$nginx_bin" -c "$conf" >> "$LOG_DIR/nginx.log" 2>&1 || log "nginx start failed"
+}
+
 init_wifi_ap()
 {
     if [ "${FACTORY_ENABLE_WIFI_AP:-0}" = "0" ]; then
@@ -662,6 +685,7 @@ stop_all()
     kill_by_pidfile "$RUN_DIR/bluetoothd.pid"
     kill_by_pidfile "$RUN_DIR/hciattach.pid"
     kill_by_pidfile "$RUN_DIR/mosquitto.pid"
+    killall nginx >/dev/null 2>&1 || true
     "$SCRIPT_DIR/factory_rndis.sh" stop >/dev/null 2>&1 || true
 }
 
@@ -674,6 +698,7 @@ start_all()
     start_rndis
     start_mqtt
     start_dbus
+    start_nginx
     init_bluetooth
     init_wifi_ap
     start_factory_test
