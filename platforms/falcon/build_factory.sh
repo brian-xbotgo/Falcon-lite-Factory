@@ -228,6 +228,24 @@ install_rootfs_bt_firmware()
     fi
 }
 
+install_rootfs_iqfiles()
+{
+    local rootfs_dir="$1"
+    local src="$OUTPUT_DIR/iqfiles"
+    local dst="$rootfs_dir/etc/iqfiles"
+
+    [ -d "$src" ] || return 0
+
+    log "Installing Falcon camera IQ files into rootfs: $dst"
+    run_cmd mkdir -p "$dst"
+    if [ "$SDK_DRY_RUN" = "1" ]; then
+        log "DRY-RUN copy Falcon IQ files to $dst"
+    else
+        cp -a "$src/." "$dst/"
+        chmod -R u=rwX,go=rX "$dst"
+    fi
+}
+
 install_rootfs_overlay()
 {
     local overlay_dir="$1"
@@ -252,6 +270,11 @@ install_rootfs_overlay()
             mkdir -p "$overlay_dir/usr/lib/firmware/qca"
             cp -a "$OUTPUT_DIR/lib/firmware/qca/." "$overlay_dir/usr/lib/firmware/qca/"
             chmod -R u=rwX,go=rX "$overlay_dir/usr/lib/firmware/qca"
+        fi
+        if [ -d "$OUTPUT_DIR/iqfiles" ]; then
+            mkdir -p "$overlay_dir/etc/iqfiles"
+            cp -a "$OUTPUT_DIR/iqfiles/." "$overlay_dir/etc/iqfiles/"
+            chmod -R u=rwX,go=rX "$overlay_dir/etc/iqfiles"
         fi
         : > "$overlay_dir/.skip_fsck"
         cat > "$overlay_dir/prepare.sh" <<'EOF'
@@ -385,6 +408,7 @@ integrate_sdk()
         install_init_script "$rootfs_dir"
         install_adb_auth_files "$rootfs_dir"
         install_rootfs_bt_firmware "$rootfs_dir"
+        install_rootfs_iqfiles "$rootfs_dir"
     else
         log "rootfs target not found yet: $rootfs_dir"
     fi
@@ -395,6 +419,7 @@ integrate_sdk()
             install_init_script "$rootfs_dir"
             install_adb_auth_files "$rootfs_dir"
             install_rootfs_bt_firmware "$rootfs_dir"
+            install_rootfs_iqfiles "$rootfs_dir"
             ensure_skip_fsck "$rootfs_dir"
         fi
     else

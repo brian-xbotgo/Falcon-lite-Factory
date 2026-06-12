@@ -28,13 +28,14 @@ private:
     };
 
     struct Config {
-        std::string driver = "auto";
+        std::string driver = "falcon_hw";
         int bus = 3;
-        std::vector<int> busCandidates = {3, 2, 0, 1, 4, 5, 6, 7, 8, 9};
+        std::vector<int> busCandidates = {3};
         int addr = 0x48;
         int kthAddr = 0x6a;
-        std::vector<int> kthBusCandidates = {0, 1, 2, 3, 4, 5, 6};
-        std::vector<std::string> uartCandidates = {"/dev/ttyS9", "/dev/ttyS11"};
+        std::vector<int> kthBusCandidates = {2};
+        std::vector<std::string> uartCandidates = {"/dev/ttyS9"};
+        std::string hwVersionAdc = "/sys/bus/iio/devices/iio:device0/in_voltage2_raw";
         int sampleCount = 120;
         int sampleIntervalMs = 50;
         float minVoltage = 1.6f;
@@ -42,6 +43,7 @@ private:
         float minAbsMt = 15.0f;
     };
 
+    bool initFalconHw();
     bool initAds1110();
     bool initAds1110OnBus(int bus);
     bool readAds1110(float& value);
@@ -62,6 +64,7 @@ private:
     static int parseIntValue(const nlohmann::json& value, int fallback);
     static float parseFloatValue(const nlohmann::json& value, float fallback);
     static Config parseConfig(const nlohmann::json& root);
+    int readFalconHwVersion() const;
 
     Config config_;
     int fd_ = -1;

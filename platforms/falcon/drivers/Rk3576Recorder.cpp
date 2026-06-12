@@ -150,14 +150,20 @@ void ensureRkaiqReady(const RecorderConfig& cfg)
         return;
     }
 
-    if (runShell("pidof rkaiq_3A_server >/dev/null 2>&1") != 0) {
-        cleanupRkaiqIpc();
-        const char* iqDir = factoryIqDir();
-        std::string cmd = std::string("nohup ") + rkaiq + " -a " + iqDir +
-            " >/userdata/logs/rkaiq_3A_server.log 2>&1 &";
-        std::fprintf(stderr, "[Rk3576Recorder] start rkaiq cmd=%s\n", cmd.c_str());
-        runShell(cmd.c_str());
+    const char* iqDir = factoryIqDir();
+    if (runShell("pidof rkaiq_3A_server >/dev/null 2>&1") == 0) {
+        std::fprintf(stderr,
+                     "[Rk3576Recorder] restart rkaiq with factory iq_dir=%s\n",
+                     iqDir);
+        runShell("killall rkaiq_3A_server >/dev/null 2>&1");
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
+
+    cleanupRkaiqIpc();
+    std::string cmd = std::string("nohup ") + rkaiq + " -a " + iqDir +
+        " >/userdata/logs/rkaiq_3A_server.log 2>&1 &";
+    std::fprintf(stderr, "[Rk3576Recorder] start rkaiq cmd=%s\n", cmd.c_str());
+    runShell(cmd.c_str());
 
     for (int i = 0; i < 30; ++i) {
         bool allReady = true;

@@ -3,6 +3,7 @@
 #include <cerrno>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <linux/i2c-dev.h>
@@ -37,7 +38,7 @@ constexpr uint8_t kAdsRegConfig2 = 0x02;
 constexpr uint8_t kAdsRegConfig3 = 0x03;
 constexpr uint8_t kAdsRegConfig4 = 0x04;
 constexpr uint8_t kAdsConfig0 = 0xb1;
-constexpr uint8_t kAdsConfig1 = 0x28;
+constexpr uint8_t kAdsConfig1 = 0x2c;
 constexpr uint8_t kAdsConfig2 = 0x00;
 constexpr uint8_t kAdsConfig3 = 0x00;
 constexpr uint8_t kAdsConfig4 = 0x00;
@@ -157,6 +158,9 @@ HallSwitchDriver::Config HallSwitchDriver::parseConfig(const nlohmann::json& roo
                 }
             }
         }
+        if (hall.contains("hw_version_adc") && hall.at("hw_version_adc").is_string()) {
+            cfg.hwVersionAdc = hall.at("hw_version_adc").get<std::string>();
+        }
         if (hall.contains("sample_count")) {
             cfg.sampleCount = parseIntValue(hall.at("sample_count"), cfg.sampleCount);
         }
@@ -187,7 +191,7 @@ HallSwitchDriver::Config HallSwitchDriver::parseConfig(const nlohmann::json& roo
         cfg.busCandidates.push_back(cfg.bus);
     }
     if (cfg.kthBusCandidates.empty()) {
-        cfg.kthBusCandidates.push_back(0);
+        cfg.kthBusCandidates.push_back(2);
     }
     if (cfg.uartCandidates.empty()) {
         cfg.uartCandidates.push_back("/dev/ttyS9");
@@ -208,6 +212,41 @@ uint64_t HallSwitchDriver::monotonicMs()
            static_cast<uint64_t>(ts.tv_nsec) / 1000000ULL;
 }
 
+int HallSwitchDriver::readFalconHwVersion() const
+{
+    FILE* fp = std::fopen(config_.hwVersionAdc.c_str(), "r");
+    int raw = 0;
+    if (!fp) {
+        std::fprintf(stderr,
+                     "[HallSwitch] hw version adc open failed path=%s err=%s, fallback HWv1.5\n",
+                     config_.hwVersionAdc.c_str(), std::strerror(errno));
+        return 0;
+    }
+
+    if (std::fscanf(fp, "%d", &raw) != 1) {
+        std::fprintf(stderr,
+                     "[HallSwitch] hw version adc read failed path=%s, fallback HWv1.5\n",
+                     config_.hwVersionAdc.c_str());
+        std::fclose(fp);
+        return 0;
+    }
+    std::fclose(fp);
+
+    int version = 0;
+    if (raw >= 0 && raw <= 30) {
+        version = 1;
+    } else if (raw >= 1628 && raw <= 1688) {
+        version = 2;
+    } else if (raw >= 3649 && raw <= 3709) {
+        version = 3;
+    }
+
+    std::fprintf(stderr,
+                 "[HallSwitch] Falcon hw_version raw=%d mapped=%d\n",
+                 raw, version);
+    return version;
+}
+
 bool HallSwitchDriver::init()
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -215,6 +254,9 @@ bool HallSwitchDriver::init()
         return true;
     }
 
+    if (config_.driver == "falcon_hw" || config_.driver == "falcon") {
+        return initFalconHw();
+    }
     if (config_.driver == "ads1110") {
         return initAds1110();
     }
@@ -240,6 +282,24 @@ bool HallSwitchDriver::init()
                  "[HallSwitch] unsupported hall driver=%s bus=%d addr=0x%02x\n",
                  config_.driver.c_str(), config_.bus, config_.addr);
     return false;
+}
+
+bool HallSwitchDriver::initFalconHw()
+{
+    const int hwVersion = readFalconHwVersion();
+    switch (hwVersion) {
+    case 1:
+    case 2:
+    case 3:
+        std::fprintf(stderr,
+                     "[HallSwitch] Falcon HWv%d selected ADS1110\n",
+                     hwVersion);
+        return initAds1110();
+    default:
+        std::fprintf(stderr,
+                     "[HallSwitch] Falcon HWv1.5/unknown selected ADS122U04\n");
+        return initAds122u04();
+    }
 }
 
 bool HallSwitchDriver::initAds1110()
@@ -765,7 +825,7 @@ bool HallSwitchDriver::ads122WriteReg(uint8_t reg, uint8_t value)
     if (fd_ < 0) {
         return false;
     }
-    if (activeDriver_ == ActiveDriver::Ads122u04) {
+    if (initialized_ && activeDriver_ == ActiveDriver::Ads122u04) {
         ads122SendCmd(kAdsCmdStop);
         tcflush(fd_, TCIFLUSH);
     }

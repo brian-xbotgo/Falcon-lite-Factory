@@ -653,10 +653,6 @@ cleanup_rkaiq_ipc()
 
 start_rkaiq()
 {
-    if pidof rkaiq_3A_server >/dev/null 2>&1; then
-        return 0
-    fi
-
     if [ -x "$BIN_DIR/rkaiq_3A_server" ]; then
         rkaiq_bin="$BIN_DIR/rkaiq_3A_server"
     elif command -v rkaiq_3A_server >/dev/null 2>&1; then
@@ -668,6 +664,12 @@ start_rkaiq()
 
     iq_dir="$IQ_DIR"
     [ -d "$iq_dir" ] || iq_dir=/etc/iqfiles
+
+    if pidof rkaiq_3A_server >/dev/null 2>&1; then
+        log "restart rkaiq_3A_server with factory iq_dir=$iq_dir"
+        killall rkaiq_3A_server >/dev/null 2>&1 || true
+        sleep 1
+    fi
 
     cleanup_rkaiq_ipc
     log "start rkaiq_3A_server iq_dir=$iq_dir"
