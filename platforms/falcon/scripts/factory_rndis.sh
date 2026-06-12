@@ -13,6 +13,7 @@ RNDIS_IP="${FACTORY_RNDIS_IP:-172.16.110.6}"
 PRODUCT="${FACTORY_USB_PRODUCT:-Factory ADB RNDIS}"
 ADB_RNDIS_PID="${FACTORY_USB_ADB_RNDIS_PID:-0x0013}"
 USB_HEALTH_INTERVAL="${FACTORY_USB_HEALTH_INTERVAL:-3}"
+USB_REBIND_ON_REPAIR="${FACTORY_USB_REBIND_ON_REPAIR:-0}"
 
 if [ -n "${FACTORY_USB_MODE:-}" ]; then
     USB_MODE="$FACTORY_USB_MODE"
@@ -198,6 +199,40 @@ usb_is_configured()
     return 0
 }
 
+gadget_is_bound()
+{
+    [ -e "$GADGET_DIR/UDC" ] || return 1
+    [ -n "$(cat "$GADGET_DIR/UDC" 2>/dev/null)" ] || return 1
+    return 0
+}
+
+function_is_linked()
+{
+    target="$1"
+    target_name="$(basename "$target")"
+    for link in "$CONFIG_DIR"/*; do
+        [ -L "$link" ] || continue
+        link_target="$(readlink "$link" 2>/dev/null || true)"
+        case "$link_target" in
+            "$target"|*/"$target_name")
+                return 0
+                ;;
+        esac
+    done
+    return 1
+}
+
+gadget_functions_match()
+{
+    if mode_has_rndis; then
+        function_is_linked "$FUNCTION_DIR/rndis.gs0" || return 1
+    fi
+    if mode_has_adb; then
+        function_is_linked "$FUNCTION_DIR/ffs.adb" || return 1
+    fi
+    return 0
+}
+
 adb_is_healthy()
 {
     mode_has_adb || return 0
@@ -216,7 +251,7 @@ rndis_is_healthy()
 
 usb_health_ok()
 {
-    usb_is_configured && adb_is_healthy && rndis_is_healthy
+    gadget_is_bound && gadget_functions_match && adb_is_healthy && rndis_is_healthy
 }
 
 repair_usb()
@@ -227,7 +262,33 @@ repair_usb()
         return 1
     }
 
-    kmsg_log "Repair USB gadget udc=$udc mode=$USB_MODE"
+    if usb_health_ok; then
+        return 0
+    fi
+
+    if gadget_is_bound; then
+        kmsg_log "Repair USB runtime without rebind mode=$USB_MODE"
+
+        if mode_has_adb; then
+            start_adbd || true
+        fi
+
+        if mode_has_rndis; then
+            bring_usb0_up || true
+        fi
+
+        if usb_health_ok; then
+            kmsg_log "USB runtime repair complete"
+            return 0
+        fi
+
+        if [ "$USB_REBIND_ON_REPAIR" != "1" ]; then
+            kmsg_log "USB gadget remains bound; skip rebind to keep adb stable"
+            return 1
+        fi
+    fi
+
+    kmsg_log "Repair USB gadget rebind udc=$udc mode=$USB_MODE"
     echo "" > "$GADGET_DIR/UDC" 2>/dev/null || true
     sleep 1
 
@@ -265,6 +326,7 @@ start_health_monitor()
 
     stop_health_monitor
     (
+        trap '' HUP
         trap 'rm -f "$PIDFILE"' EXIT
         was_healthy=0
         cooldown=0
@@ -320,7 +382,21 @@ start_usb()
 
     mountpoint -q /sys/kernel/config 2>/dev/null ||
         mount -t configfs none /sys/kernel/config 2>/dev/null || true
+
+    if usb_health_ok; then
+        log "USB gadget already healthy mode=$USB_MODE"
+        start_health_monitor
+        return 0
+    fi
+
     mkdir -p "$GADGET_DIR" "$STRINGS_DIR" "$CONFIG_STRINGS_DIR" "$FUNCTION_DIR" "$CONFIG_DIR"
+
+    if gadget_is_bound && [ "${FACTORY_USB_RECONFIGURE:-0}" != "1" ]; then
+        log "USB gadget already bound; skip reconfiguration mode=$USB_MODE"
+        repair_usb || true
+        start_health_monitor
+        return 0
+    fi
 
     reset_gadget_links
 
@@ -405,7 +481,11 @@ case "${1:-start}" in
         stop_usb
         ;;
     restart)
-        stop_usb
+        if [ "${FACTORY_USB_RECONFIGURE:-0}" = "1" ]; then
+            stop_usb
+        else
+            log "restart requested; keep existing USB binding"
+        fi
         start_usb
         ;;
     *)

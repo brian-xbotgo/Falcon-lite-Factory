@@ -1,7 +1,7 @@
 #!/bin/sh
 #
-# Factory 3A daemon startup for Falcon.  The stock script starts rkaiq without
-# an IQ path and before the OEM factory payload is ready; keep this one explicit.
+# Factory 3A daemon startup for Falcon.  This rkaiq_3A_server build reads
+# /etc/iqfiles by itself; it does not accept the newer "-a <iq_dir>" option.
 #
 
 LOG_DIR=/userdata/logs
@@ -104,8 +104,8 @@ start_rkaiq()
 
 	for attempt in 1 2 3; do
 		cleanup_ipc
-		log "start attempt=$attempt $rkaiq_bin -a $iq_dir"
-		"$rkaiq_bin" -a "$iq_dir" >> "$LOG_DIR/rkaiq_3A_server.log" 2>&1 < /dev/null &
+		log "start attempt=$attempt $rkaiq_bin iq_dir=$iq_dir"
+		"$rkaiq_bin" >> "$LOG_DIR/rkaiq_3A_server.log" 2>&1 < /dev/null &
 		echo $! > "$PID_FILE"
 		sleep 3
 		if rkaiq_alive; then

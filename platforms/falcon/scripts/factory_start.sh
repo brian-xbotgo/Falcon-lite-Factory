@@ -110,7 +110,7 @@ start_mqtt()
 
 start_rndis()
 {
-    if command -v usbdevice >/dev/null 2>&1; then
+    if [ "${FACTORY_USB_RECONFIGURE:-0}" = "1" ] && command -v usbdevice >/dev/null 2>&1; then
         usbdevice stop >> "$LOG_DIR/factory_rndis.log" 2>&1 || true
     fi
 
@@ -710,7 +710,7 @@ start_rkaiq()
     for attempt in 1 2 3; do
         cleanup_rkaiq_ipc
         log "start rkaiq_3A_server attempt=$attempt iq_dir=$iq_dir"
-        "$rkaiq_bin" -a "$iq_dir" >> "$LOG_DIR/rkaiq_3A_server.log" 2>&1 < /dev/null &
+        "$rkaiq_bin" >> "$LOG_DIR/rkaiq_3A_server.log" 2>&1 < /dev/null &
         echo $! > "$RUN_DIR/rkaiq_3A_server.pid"
         sleep 3
         if pidof rkaiq_3A_server >/dev/null 2>&1; then
@@ -744,7 +744,7 @@ prepare_wifi_identity()
         return 0
     fi
 
-    uuid="$(tr -d '\n\r' < "$cpu_file" | sha256sum | awk '{print $1}' | tail -c 6)"
+    uuid="$(tr -d '\n\r' < "$cpu_file" | sha256sum | awk '{print $1}' | tr -d '\n' | tail -c 6)"
     [ -n "$uuid" ] || return 0
     ssid="Xbt-F-$uuid"
     password="$(printf '%s' "${ssid}DragonflySalt" | sha256sum | cut -c1-11)"
@@ -796,8 +796,9 @@ init_wifi_ap()
 start_factory_test()
 {
     if pidof factory_test >/dev/null 2>&1; then
-        log "factory_test already running"
-        return 0
+        log "stop stale factory_test before start"
+        killall factory_test >/dev/null 2>&1 || true
+        sleep 1
     fi
 
     log "start factory_test"
@@ -820,8 +821,11 @@ stop_all()
     kill_by_pidfile "$RUN_DIR/mosquitto.pid"
     kill_by_pidfile "$RUN_DIR/rkaiq_3A_server.pid"
     killall nginx >/dev/null 2>&1 || true
+    killall factory_test >/dev/null 2>&1 || true
     killall rkaiq_3A_server >/dev/null 2>&1 || true
-    "$SCRIPT_DIR/factory_rndis.sh" stop >/dev/null 2>&1 || true
+    if [ "${FACTORY_USB_STOP_ON_SERVICE_STOP:-0}" = "1" ]; then
+        "$SCRIPT_DIR/factory_rndis.sh" stop >/dev/null 2>&1 || true
+    fi
 }
 
 start_all()

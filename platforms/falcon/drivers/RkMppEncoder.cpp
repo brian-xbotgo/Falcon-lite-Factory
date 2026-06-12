@@ -55,9 +55,10 @@ bool RkMppEncoder::init(const EncoderConfig& cfg) {
 
     mpp_enc_cfg_set_s32(cfg_handle, "rc:mode",          1);                  // CBR
     mpp_enc_cfg_set_s32(cfg_handle, "rc:quality",       MPP_ENC_RC_QUALITY_MEDIUM);
-    mpp_enc_cfg_set_s32(cfg_handle, "rc:bps_target",    cfg_.bitrate_kbps);  // unit: kbps
-    mpp_enc_cfg_set_s32(cfg_handle, "rc:bps_max",       cfg_.bitrate_kbps * 17 / 16);
-    mpp_enc_cfg_set_s32(cfg_handle, "rc:bps_min",       cfg_.bitrate_kbps * 15 / 16);
+    const int bps = cfg_.bitrate_kbps * 1000;
+    mpp_enc_cfg_set_s32(cfg_handle, "rc:bps_target",    bps);
+    mpp_enc_cfg_set_s32(cfg_handle, "rc:bps_max",       bps * 17 / 16);
+    mpp_enc_cfg_set_s32(cfg_handle, "rc:bps_min",       bps * 15 / 16);
     mpp_enc_cfg_set_s32(cfg_handle, "rc:gop",           cfg_.gop);
     mpp_enc_cfg_set_s32(cfg_handle, "rc:fps_in_num",    cfg_.fps);
     mpp_enc_cfg_set_s32(cfg_handle, "rc:fps_in_denom",  1);
@@ -73,7 +74,9 @@ bool RkMppEncoder::init(const EncoderConfig& cfg) {
     mpp_enc_cfg_set_s32(cfg_handle, "codec:type", MPP_VIDEO_CodingAVC);
 
     mpp_enc_cfg_set_s32(cfg_handle, "h264:profile",             100);  // High
-    mpp_enc_cfg_set_s32(cfg_handle, "h264:level",               40);   // 1080p@30fps
+    const int h264_level = (cfg_.width >= 3840 || cfg_.height >= 2160) ? 51 :
+                           (cfg_.width >= 2560 || cfg_.height >= 1440) ? 50 : 40;
+    mpp_enc_cfg_set_s32(cfg_handle, "h264:level",       h264_level);
     mpp_enc_cfg_set_s32(cfg_handle, "h264:cabac_en",      1);
     mpp_enc_cfg_set_s32(cfg_handle, "h264:trans8x8",      1);
     mpp_enc_cfg_set_s32(cfg_handle, "h264:qp_init",             24);
@@ -101,9 +104,9 @@ bool RkMppEncoder::init(const EncoderConfig& cfg) {
     buf_group_ = group;
 
     initialized_ = true;
-    std::fprintf(stderr, "[mpp] encoder ready: %dx%d@%dfps H.264 CBR %dkbps GOP=%d stride=%dx%d\n",
+    std::fprintf(stderr, "[mpp] encoder ready: %dx%d@%dfps H.264 CBR %dkbps GOP=%d level=%d stride=%dx%d\n",
                  cfg_.width, cfg_.height, cfg_.fps,
-                 cfg_.bitrate_kbps, cfg_.gop,
+                 cfg_.bitrate_kbps, cfg_.gop, h264_level,
                  hor_stride_, ver_stride_);
     return true;
 }

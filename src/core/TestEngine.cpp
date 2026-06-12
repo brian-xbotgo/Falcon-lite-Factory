@@ -370,6 +370,7 @@ void TestEngine::dispatch(const std::string& topic, const nlohmann::json& testCf
         params = nlohmann::json::object();
     }
     params["topic"] = topic;
+    params["request_payload"] = requestPayload;
 
     TestContext ctx(
         drivers_,
@@ -428,8 +429,10 @@ void TestEngine::publishResult(const std::string& topic, const TestResult& resul
         try {
             const auto errorCode = errorCodeFromResult(result);
             const auto answerTopic = answerTopicFor(topic);
-            const auto payload = protocolResponsePayload(requestPayload, errorCode,
-                                                         result.responseExtra);
+            const auto payload = (topic == "37R")
+                ? result.responseExtra
+                : protocolResponsePayload(requestPayload, errorCode,
+                                          result.responseExtra);
             const int rc = mosquitto_publish(mqttClient_, nullptr, answerTopic.c_str(),
                                              static_cast<int>(payload.size()),
                                              payload.data(), 2, false);

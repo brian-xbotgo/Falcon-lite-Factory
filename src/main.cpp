@@ -13,10 +13,13 @@
 #include <chrono>
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <csignal>
+#include <cstring>
 #include <string>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/file.h>
 #include <unistd.h>
 
 using namespace ft;
@@ -24,6 +27,7 @@ using namespace ft;
 namespace {
 
 std::atomic<bool> gQuit{false};
+int gLockFd = -1;
 
 void handleSignal(int)
 {
@@ -66,9 +70,29 @@ void mirrorLogsForFactoryTool()
     }).detach();
 }
 
+bool takeSingleInstanceLock()
+{
+    mkdir("/var/run", 0755);
+    mkdir("/var/run/factory_fw", 0755);
+    gLockFd = open("/var/run/factory_fw/factory_test.lock",
+                   O_RDWR | O_CREAT | O_CLOEXEC, 0644);
+    if (gLockFd < 0) {
+        std::fprintf(stderr, "[main] failed to open instance lock: %s\n", strerror(errno));
+        return false;
+    }
+    if (flock(gLockFd, LOCK_EX | LOCK_NB) != 0) {
+        std::fprintf(stderr, "[main] factory_test already running, exit\n");
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 int main() {
+    if (!takeSingleInstanceLock()) {
+        return 1;
+    }
     mirrorLogsForFactoryTool();
 
     std::signal(SIGINT, handleSignal);

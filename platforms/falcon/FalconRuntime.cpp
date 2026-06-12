@@ -378,7 +378,7 @@ void prepareWifiIdentity()
     }
 
     const std::string suffix = readCommandOutput(
-        "tr -d '\\n\\r' < /userdata/cpuinfo.txt | sha256sum | awk '{print $1}' | tail -c 6");
+        "tr -d '\\n\\r' < /userdata/cpuinfo.txt | sha256sum | awk '{print $1}' | tr -d '\\n' | tail -c 6");
     if (!validHashSuffix(suffix)) {
         std::fprintf(stderr, "%s CPU hash suffix invalid value=%s\n",
                      kLogPrefix, suffix.c_str());
@@ -430,7 +430,7 @@ bool ensureRkaiqStarted(const nlohmann::json& config, int timeoutMs)
 
     cleanupRkaiqIpc();
     writeWholeFile("/userdata/logs/rkaiq_3A_server.log", "");
-    const std::string cmd = shellQuote(binary) + " -a " + shellQuote(iq) +
+    const std::string cmd = shellQuote(binary) +
         " >/userdata/logs/rkaiq_3A_server.log 2>&1 < /dev/null &";
     std::fprintf(stderr, "%s start rkaiq cmd=%s\n", kLogPrefix, cmd.c_str());
     runShell(cmd);

@@ -124,7 +124,7 @@ std::string bleNameFromCpuSerial()
     }
     const std::string suffix =
         commandOutput("printf %s " + shellQuote(serial) +
-                      " | sha256sum | awk '{print $1}' | tail -c 6");
+                      " | sha256sum | awk '{print $1}' | tr -d '\\n' | tail -c 6");
     if (!validSuffix(suffix)) {
         LOG("CPU serial hash suffix invalid: %s\n", suffix.c_str());
         return {};
