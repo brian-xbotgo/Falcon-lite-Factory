@@ -15,6 +15,9 @@
 #include <atomic>
 #include <csignal>
 #include <string>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 using namespace ft;
 
@@ -27,9 +30,47 @@ void handleSignal(int)
     gQuit = true;
 }
 
+void mirrorLogsForFactoryTool()
+{
+    mkdir("/userdata", 0755);
+    mkdir("/userdata/logs", 0755);
+    const int logFd = open("/userdata/logs/prod_test_new.log",
+                           O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (logFd < 0) return;
+
+    const int consoleFd = dup(STDOUT_FILENO);
+    int pipeFd[2];
+    if (pipe(pipeFd) != 0) {
+        close(logFd);
+        if (consoleFd >= 0) close(consoleFd);
+        return;
+    }
+
+    dup2(pipeFd[1], STDOUT_FILENO);
+    dup2(pipeFd[1], STDERR_FILENO);
+    close(pipeFd[1]);
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
+    std::setvbuf(stderr, nullptr, _IONBF, 0);
+
+    std::thread([readFd = pipeFd[0], logFd, consoleFd]() {
+        char buffer[1024];
+        while (true) {
+            const ssize_t n = read(readFd, buffer, sizeof(buffer));
+            if (n <= 0) break;
+            if (consoleFd >= 0) write(consoleFd, buffer, static_cast<size_t>(n));
+            write(logFd, buffer, static_cast<size_t>(n));
+        }
+        if (consoleFd >= 0) close(consoleFd);
+        close(logFd);
+        close(readFd);
+    }).detach();
+}
+
 } // namespace
 
 int main() {
+    mirrorLogsForFactoryTool();
+
     std::signal(SIGINT, handleSignal);
     std::signal(SIGTERM, handleSignal);
 

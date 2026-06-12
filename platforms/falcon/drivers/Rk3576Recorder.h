@@ -16,6 +16,7 @@ public:
     bool isRecording() const override;
 
 private:
+    RecorderConfig config_;
     std::unique_ptr<V4l2Recorder> recorder_;
 };
 

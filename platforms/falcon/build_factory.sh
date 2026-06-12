@@ -428,7 +428,7 @@ cp -f "$SCRIPT_DIR/init.d/"* "$OUTPUT_DIR/init.d/"
 cp -a "$SCRIPT_DIR/sdk_patch/." "$OUTPUT_DIR/sdk_patch/"
 chmod 755 "$OUTPUT_DIR/scripts/"*.sh "$OUTPUT_DIR/init.d/"* "$OUTPUT_DIR/sdk_patch/"*.sh
 
-for tool in mosquitto dbus-daemon dbus-uuidgen adbd arecord amixer brcm_patchram_plus1 btattach hciattach hciconfig rk_hciattach rtk_hciattach wifibt-init.sh wifibt-util.sh bt-tty wifibt-bus wifibt-chip wifibt-id wifibt-info wifibt-module wifibt-vendor; do
+for tool in mosquitto dbus-daemon dbus-uuidgen adbd arecord amixer brcm_patchram_plus1 btattach hciattach hciconfig rk_hciattach rtk_hciattach wifibt-init.sh wifibt-util.sh bt-tty wifibt-bus wifibt-chip wifibt-id wifibt-info wifibt-module wifibt-vendor rkaiq_3A_server; do
     if [ -n "$SDK_TARGET_DIR" ] && [ -f "$SDK_TARGET_DIR/usr/bin/$tool" ]; then
         cp -P "$SDK_TARGET_DIR/usr/bin/$tool" "$OUTPUT_DIR/bin/"
     fi

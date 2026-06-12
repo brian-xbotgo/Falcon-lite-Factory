@@ -25,7 +25,8 @@ log()
 
 ensure_dirs()
 {
-    mkdir -p "$LOG_DIR" "$RUN_DIR" /userdata/prod /device_data /tmp
+    mkdir -p "$LOG_DIR" "$RUN_DIR" /userdata/prod /userdata/record /device_data /tmp /var/tmp
+    touch /userdata/logs/prod_test_new.log 2>/dev/null || true
     if mount | grep -q " on /device_data "; then
         mount -o remount,rw /device_data 2>/dev/null || log "remount /device_data rw failed"
     fi
@@ -643,6 +644,34 @@ start_nginx()
     "$nginx_bin" -c "$conf" >> "$LOG_DIR/nginx.log" 2>&1 || log "nginx start failed"
 }
 
+cleanup_rkaiq_ipc()
+{
+    rm -f /tmp/aiq0.lock /tmp/aiq1.lock /tmp/.rkaiq_3A /tmp/rkaiq_* /tmp/*.rkaiq /var/tmp/rkipc 2>/dev/null || true
+    ipcrm -a >/dev/null 2>&1 || true
+}
+
+start_rkaiq()
+{
+    if pidof rkaiq_3A_server >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [ -x "$BIN_DIR/rkaiq_3A_server" ]; then
+        rkaiq_bin="$BIN_DIR/rkaiq_3A_server"
+    elif command -v rkaiq_3A_server >/dev/null 2>&1; then
+        rkaiq_bin="$(command -v rkaiq_3A_server)"
+    else
+        log "rkaiq_3A_server not found"
+        return 0
+    fi
+
+    cleanup_rkaiq_ipc
+    log "start rkaiq_3A_server"
+    "$rkaiq_bin" -a /etc/iqfiles >> "$LOG_DIR/rkaiq_3A_server.log" 2>&1 < /dev/null &
+    echo $! > "$RUN_DIR/rkaiq_3A_server.pid"
+    sleep 2
+}
+
 init_wifi_ap()
 {
     if [ "${FACTORY_ENABLE_WIFI_AP:-0}" = "0" ]; then
@@ -685,7 +714,9 @@ stop_all()
     kill_by_pidfile "$RUN_DIR/bluetoothd.pid"
     kill_by_pidfile "$RUN_DIR/hciattach.pid"
     kill_by_pidfile "$RUN_DIR/mosquitto.pid"
+    kill_by_pidfile "$RUN_DIR/rkaiq_3A_server.pid"
     killall nginx >/dev/null 2>&1 || true
+    killall rkaiq_3A_server >/dev/null 2>&1 || true
     "$SCRIPT_DIR/factory_rndis.sh" stop >/dev/null 2>&1 || true
 }
 
@@ -699,6 +730,7 @@ start_all()
     start_mqtt
     start_dbus
     start_nginx
+    start_rkaiq
     init_bluetooth
     init_wifi_ap
     start_factory_test

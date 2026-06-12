@@ -10,6 +10,7 @@
 #include <thread>
 #include <chrono>
 #include <algorithm>
+#include <cctype>
 #include <sys/stat.h>
 
 #ifdef HAVE_MOSQUITTO
@@ -50,22 +51,6 @@ uint32_t errorCodeFromResult(const TestResult& result)
     return 1;
 }
 
-std::string protocolResponsePayload(const std::string& requestPayload,
-                                    uint32_t errorCode,
-                                    const std::string& responseExtra)
-{
-    std::string payload(kResponsePayloadSize, '\0');
-    const size_t copyLen = std::min(requestPayload.size(), kRequestPayloadSize);
-    std::copy_n(requestPayload.data(), copyLen, payload.data());
-
-    payload[38] = static_cast<char>((errorCode >> 24) & 0xff);
-    payload[39] = static_cast<char>((errorCode >> 16) & 0xff);
-    payload[40] = static_cast<char>((errorCode >> 8) & 0xff);
-    payload[41] = static_cast<char>(errorCode & 0xff);
-    payload.append(responseExtra);
-    return payload;
-}
-
 std::string trimProtocolText(std::string value)
 {
     const auto nul = value.find('\0');
@@ -94,6 +79,55 @@ bool isValidProtocolSn(const std::string& sn)
         }
     }
     return hasNonZero;
+}
+
+std::string readValidSnFile(const char* path)
+{
+    std::ifstream in(path);
+    if (!in.is_open()) {
+        return {};
+    }
+
+    std::string value;
+    std::getline(in, value);
+    value = trimProtocolText(value);
+    return isValidProtocolSn(value) ? value : std::string();
+}
+
+std::string responseSnForPayload(const std::string& requestPayload)
+{
+    if (requestPayload.size() >= 14) {
+        const auto payloadSn = trimProtocolText(requestPayload.substr(0, 14));
+        if (isValidProtocolSn(payloadSn)) {
+            return payloadSn;
+        }
+    }
+
+    const auto fileSn = readValidSnFile("/device_data/pcba.txt");
+    if (!fileSn.empty()) {
+        return fileSn;
+    }
+
+    return "00000000000000";
+}
+
+std::string protocolResponsePayload(const std::string& requestPayload,
+                                    uint32_t errorCode,
+                                    const std::string& responseExtra)
+{
+    std::string payload(kResponsePayloadSize, '\0');
+    const size_t copyLen = std::min(requestPayload.size(), kRequestPayloadSize);
+    std::copy_n(requestPayload.data(), copyLen, payload.data());
+
+    const auto sn = responseSnForPayload(requestPayload);
+    std::copy(sn.begin(), sn.end(), payload.begin());
+
+    payload[38] = static_cast<char>((errorCode >> 24) & 0xff);
+    payload[39] = static_cast<char>((errorCode >> 16) & 0xff);
+    payload[40] = static_cast<char>((errorCode >> 8) & 0xff);
+    payload[41] = static_cast<char>(errorCode & 0xff);
+    payload.append(responseExtra);
+    return payload;
 }
 
 void persistSnFromPayload(const std::string& requestPayload)
