@@ -8,9 +8,11 @@ STRINGS_DIR="$GADGET_DIR/strings/0x409"
 CONFIG_STRINGS_DIR="$CONFIG_DIR/strings/0x409"
 ADB_FFS_DIR=/dev/usb-ffs/adb
 USB_MODE_FILE=/device_data/factory_usb_mode
+PIDFILE=/var/run/factory_usb_health.pid
 RNDIS_IP="${FACTORY_RNDIS_IP:-172.16.110.6}"
 PRODUCT="${FACTORY_USB_PRODUCT:-Factory ADB RNDIS}"
 ADB_RNDIS_PID="${FACTORY_USB_ADB_RNDIS_PID:-0x0013}"
+USB_HEALTH_INTERVAL="${FACTORY_USB_HEALTH_INTERVAL:-3}"
 
 if [ -n "${FACTORY_USB_MODE:-}" ]; then
     USB_MODE="$FACTORY_USB_MODE"
@@ -33,6 +35,14 @@ esac
 log()
 {
     echo "[factory_usb] $*"
+}
+
+kmsg_log()
+{
+    if [ -w /dev/kmsg ]; then
+        echo "[factory_usb] $*" > /dev/kmsg 2>/dev/null || true
+    fi
+    log "$*"
 }
 
 write_if_exists()
@@ -103,6 +113,11 @@ id_product_for_mode()
     esac
 }
 
+find_udc()
+{
+    ls /sys/class/udc 2>/dev/null | head -n 1
+}
+
 prepare_adb_env()
 {
     if [ -f /oem/usr/etc/profile.d/adbd.sh ]; then
@@ -170,6 +185,110 @@ start_adbd()
 
     log "adb FunctionFS endpoints not ready"
     return 1
+}
+
+usb_is_configured()
+{
+    udc="$(find_udc)"
+    [ -n "$udc" ] || return 1
+    [ -e "/sys/class/udc/$udc/state" ] || return 1
+    [ "$(cat "/sys/class/udc/$udc/state" 2>/dev/null)" = "configured" ] || return 1
+    [ -e "$GADGET_DIR/UDC" ] || return 1
+    [ -n "$(cat "$GADGET_DIR/UDC" 2>/dev/null)" ] || return 1
+    return 0
+}
+
+adb_is_healthy()
+{
+    mode_has_adb || return 0
+    pidof adbd >/dev/null 2>&1 || return 1
+    [ -e "$ADB_FFS_DIR/ep1" ] && [ -e "$ADB_FFS_DIR/ep2" ] || return 1
+    return 0
+}
+
+rndis_is_healthy()
+{
+    mode_has_rndis || return 0
+    ifconfig usb0 >/dev/null 2>&1 || return 1
+    ifconfig usb0 2>/dev/null | grep -q "$RNDIS_IP" || return 1
+    return 0
+}
+
+usb_health_ok()
+{
+    usb_is_configured && adb_is_healthy && rndis_is_healthy
+}
+
+repair_usb()
+{
+    udc="$(find_udc)"
+    [ -n "$udc" ] || {
+        kmsg_log "USB repair skipped: no UDC"
+        return 1
+    }
+
+    kmsg_log "Repair USB gadget udc=$udc mode=$USB_MODE"
+    echo "" > "$GADGET_DIR/UDC" 2>/dev/null || true
+    sleep 1
+
+    if mode_has_adb; then
+        killall adbd >/dev/null 2>&1 || true
+        start_adbd || true
+    fi
+
+    echo "$udc" > "$GADGET_DIR/UDC" 2>/dev/null || {
+        kmsg_log "USB repair bind failed: $udc"
+        return 1
+    }
+
+    if mode_has_rndis; then
+        bring_usb0_up || true
+    fi
+
+    kmsg_log "USB repair complete"
+}
+
+stop_health_monitor()
+{
+    if [ -f "$PIDFILE" ]; then
+        old_pid="$(cat "$PIDFILE" 2>/dev/null || true)"
+        if [ -n "${old_pid:-}" ] && kill -0 "$old_pid" 2>/dev/null; then
+            kill "$old_pid" 2>/dev/null || true
+        fi
+        rm -f "$PIDFILE"
+    fi
+}
+
+start_health_monitor()
+{
+    [ "${FACTORY_USB_HEALTH_MONITOR:-1}" = "0" ] && return 0
+
+    stop_health_monitor
+    (
+        trap 'rm -f "$PIDFILE"' EXIT
+        was_healthy=0
+        cooldown=0
+
+        while true; do
+            if usb_health_ok; then
+                was_healthy=1
+                cooldown=0
+            elif [ "$was_healthy" -eq 1 ] && [ "$cooldown" -le 0 ]; then
+                repair_usb || true
+                cooldown=5
+            elif [ "$was_healthy" -eq 0 ] && [ "$cooldown" -le 0 ]; then
+                repair_usb || true
+                cooldown=5
+            fi
+
+            if [ "$cooldown" -gt 0 ]; then
+                cooldown=$((cooldown - 1))
+            fi
+            sleep "$USB_HEALTH_INTERVAL"
+        done
+    ) >/dev/null 2>&1 &
+    echo $! > "$PIDFILE"
+    log "USB health monitor started pid=$!"
 }
 
 stop_adbd()
@@ -245,7 +364,7 @@ start_usb()
         next_func=$((next_func + 1))
     fi
 
-    udc="$(ls /sys/class/udc 2>/dev/null | head -n 1)"
+    udc="$(find_udc)"
     if [ -n "$udc" ]; then
         if ! echo "$udc" > "$GADGET_DIR/UDC" 2>/dev/null; then
             log "bind udc=$udc failed"
@@ -260,10 +379,13 @@ start_usb()
     if mode_has_rndis; then
         bring_usb0_up
     fi
+
+    start_health_monitor
 }
 
 stop_usb()
 {
+    stop_health_monitor
     ifconfig usb0 down 2>/dev/null || true
     if [ -e "$GADGET_DIR/UDC" ]; then
         echo "" > "$GADGET_DIR/UDC" 2>/dev/null || true
@@ -276,6 +398,9 @@ case "${1:-start}" in
     start)
         start_usb
         ;;
+    monitor)
+        start_health_monitor
+        ;;
     stop)
         stop_usb
         ;;
@@ -284,7 +409,7 @@ case "${1:-start}" in
         start_usb
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart}" >&2
+        echo "Usage: $0 {start|monitor|stop|restart}" >&2
         echo "FACTORY_USB_MODE=adb_rndis|adb|rndis" >&2
         echo "Persistent mode file: $USB_MODE_FILE" >&2
         exit 1

@@ -81,6 +81,12 @@ std::string currentBleName(BleAdvertiser* self)
     return self->m_deviceInfo.getBleName();
 }
 
+std::string factorySnForLog(BleAdvertiser* self)
+{
+    const auto sn = currentFactorySn(self);
+    return isValidSnText(sn) ? sn : std::string("<invalid>");
+}
+
 bool bluezAdapterReady(GDBusConnection* conn, std::string& detail)
 {
     GError* err = nullptr;
@@ -380,6 +386,13 @@ void BleAdvertiser::createAdvertisement()
 
 void BleAdvertiser::registerAdvertisement()
 {
+    if (m_factoryMode) {
+        const auto bleName = currentBleName(this);
+        const auto sn = factorySnForLog(this);
+        LOG("Factory BLE advertisement payload: name=%s manufacturer_sn=%s\n",
+            bleName.c_str(), sn.c_str());
+    }
+
     GVariantBuilder opts;
     g_variant_builder_init(&opts, G_VARIANT_TYPE("a{sv}"));
     g_variant_builder_add(&opts, "{sv}", "param", g_variant_new_string("value"));
@@ -403,6 +416,13 @@ void BleAdvertiser::registerAdvertisement()
 void BleAdvertiser::startAdvertisement()
 {
     if (m_isAdvertising || !m_conn) return;
+
+    if (m_factoryMode) {
+        const auto bleName = currentBleName(this);
+        const auto sn = factorySnForLog(this);
+        LOG("Factory BLE advertisement restart: name=%s manufacturer_sn=%s\n",
+            bleName.c_str(), sn.c_str());
+    }
 
     GVariantBuilder opts;
     g_variant_builder_init(&opts, G_VARIANT_TYPE("a{sv}"));

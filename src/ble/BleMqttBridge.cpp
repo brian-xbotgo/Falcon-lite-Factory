@@ -18,11 +18,25 @@ namespace {
 
 constexpr int kVersionInfoSnPcbaOffset = 4 + 16;
 constexpr int kVersionInfoMinLen = kVersionInfoSnPcbaOffset + SN_LEN;
+constexpr int kFactoryPacketMinLen = SN_LEN + 16 + 8;
 
 std::string snToString(const uint8_t* sn)
 {
     return std::string(reinterpret_cast<const char*>(sn),
                        reinterpret_cast<const char*>(sn) + SN_LEN);
+}
+
+bool isFactoryRequestTopic(const char* topic)
+{
+    if (!topic || topic[0] == '\0') {
+        return false;
+    }
+
+    const char* p = topic;
+    while (*p >= '0' && *p <= '9') {
+        ++p;
+    }
+    return p != topic && p[0] == 'R' && p[1] == '\0';
 }
 
 } // namespace
@@ -69,7 +83,7 @@ int BleMqttBridge::init(bool factoryMode, bool waitForSn)
         return -1;
     }
 
-    if (m_factoryMode && !waitForSn) {
+    if (m_factoryMode) {
         loadSnFromFile();
     }
 
@@ -205,7 +219,11 @@ bool BleMqttBridge::extractSnFromMessage(const char* topic, const uint8_t* paylo
         return false;
     }
 
-    return updateSn(payload, topic);
+    if (isFactoryRequestTopic(topic) && payloadLen >= kFactoryPacketMinLen) {
+        return updateSn(payload, topic);
+    }
+
+    return false;
 }
 
 bool BleMqttBridge::updateSn(const uint8_t* sn, const char* source)
@@ -214,9 +232,16 @@ bool BleMqttBridge::updateSn(const uint8_t* sn, const char* source)
         return false;
     }
 
+    const auto text = snToString(sn);
+
     bool changed = false;
     {
         std::lock_guard<std::mutex> lock(m_snMutex);
+        if (m_snValid && std::memcmp(m_sn, sn, SN_LEN) != 0) {
+            LOG("Ignore different SN from [%s]: current=%.*s incoming=%s\n",
+                source ? source : "<unknown>", SN_LEN, m_sn, text.c_str());
+            return false;
+        }
         changed = !m_snValid || std::memcmp(m_sn, sn, SN_LEN) != 0;
         if (!changed) {
             return true;
@@ -227,7 +252,6 @@ bool BleMqttBridge::updateSn(const uint8_t* sn, const char* source)
 
     persistSn(sn);
     m_snCv.notify_all();
-    const auto text = snToString(sn);
     LOG("Got 14-byte SN from [%s]: %s\n", source ? source : "<unknown>", text.c_str());
     return true;
 }
