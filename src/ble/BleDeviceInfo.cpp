@@ -3,10 +3,136 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cctype>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 #define LOG(fmt, ...) std::fprintf(stderr, "[ble_wifi] " fmt, ##__VA_ARGS__)
 
 namespace ft {
+
+namespace {
+
+std::string trim(std::string value)
+{
+    while (!value.empty() && (value.back() == '\n' || value.back() == '\r' ||
+                              value.back() == ' ' || value.back() == '\t')) {
+        value.pop_back();
+    }
+    size_t pos = 0;
+    while (pos < value.size() && (value[pos] == ' ' || value[pos] == '\t')) {
+        ++pos;
+    }
+    if (pos > 0) {
+        value.erase(0, pos);
+    }
+    return value;
+}
+
+std::string readWholeFile(const char* path)
+{
+    std::ifstream in(path);
+    if (!in.is_open()) {
+        return {};
+    }
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
+
+std::string shellQuote(const std::string& value)
+{
+    std::string out = "'";
+    for (char ch : value) {
+        if (ch == '\'') {
+            out += "'\\''";
+        } else {
+            out += ch;
+        }
+    }
+    out += "'";
+    return out;
+}
+
+std::string commandOutput(const std::string& cmd)
+{
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if (!pipe) {
+        return {};
+    }
+    std::string out;
+    char buf[128] = {};
+    while (fgets(buf, sizeof(buf), pipe)) {
+        out += buf;
+    }
+    pclose(pipe);
+    return trim(out);
+}
+
+bool validSuffix(const std::string& value)
+{
+    if (value.size() != 6) {
+        return false;
+    }
+    for (char ch : value) {
+        if (!std::isxdigit(static_cast<unsigned char>(ch))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool isDefaultFalconName(const char* name)
+{
+    return name && std::strcmp(name, "Xbt-F-000000") == 0;
+}
+
+std::string cpuSerial()
+{
+    std::string serial = trim(readWholeFile("/userdata/cpuinfo.txt"));
+    if (!serial.empty()) {
+        return serial;
+    }
+
+    std::ifstream in("/proc/cpuinfo");
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.find("Serial") == std::string::npos) {
+            continue;
+        }
+        const auto colon = line.find(':');
+        if (colon != std::string::npos) {
+            return trim(line.substr(colon + 1));
+        }
+        std::istringstream ss(line);
+        std::string token;
+        std::string last;
+        while (ss >> token) {
+            last = token;
+        }
+        return trim(last);
+    }
+    return {};
+}
+
+std::string bleNameFromCpuSerial()
+{
+    const std::string serial = cpuSerial();
+    if (serial.empty()) {
+        return {};
+    }
+    const std::string suffix =
+        commandOutput("printf %s " + shellQuote(serial) +
+                      " | sha256sum | awk '{print $1}' | tail -c 6");
+    if (!validSuffix(suffix)) {
+        LOG("CPU serial hash suffix invalid: %s\n", suffix.c_str());
+        return {};
+    }
+    return "Xbt-F-" + suffix;
+}
+
+} // namespace
 
 int BleDeviceInfo::getDeviceColor()
 {
@@ -77,6 +203,11 @@ const char* BleDeviceInfo::getBleName()
     FILE* fp = fopen(SSID_FILE, "r");
     if (!fp) {
         LOG("Failed to open %s\n", SSID_FILE);
+        const auto fallback = bleNameFromCpuSerial();
+        if (!fallback.empty()) {
+            snprintf(m_bleName, sizeof(m_bleName), "%s", fallback.c_str());
+            LOG("BLE name fallback from CPU serial: %s\n", m_bleName);
+        }
         return m_bleName;
     }
 
@@ -92,8 +223,20 @@ const char* BleDeviceInfo::getBleName()
 
     if (ssid[0]) {
         snprintf(m_bleName, sizeof(m_bleName), "%s", ssid);
+        if (isDefaultFalconName(m_bleName)) {
+            const auto fallback = bleNameFromCpuSerial();
+            if (!fallback.empty()) {
+                snprintf(m_bleName, sizeof(m_bleName), "%s", fallback.c_str());
+                LOG("BLE name fallback from default SSID: %s\n", m_bleName);
+            }
+        }
     } else {
         LOG("SSID not found in %s, using default\n", SSID_FILE);
+        const auto fallback = bleNameFromCpuSerial();
+        if (!fallback.empty()) {
+            snprintf(m_bleName, sizeof(m_bleName), "%s", fallback.c_str());
+            LOG("BLE name fallback from CPU serial: %s\n", m_bleName);
+        }
     }
     return m_bleName;
 }

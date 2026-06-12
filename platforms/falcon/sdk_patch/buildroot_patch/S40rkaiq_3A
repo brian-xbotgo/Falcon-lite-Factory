@@ -1,0 +1,149 @@
+#!/bin/sh
+#
+# Factory 3A daemon startup for Falcon.  The stock script starts rkaiq without
+# an IQ path and before the OEM factory payload is ready; keep this one explicit.
+#
+
+LOG_DIR=/userdata/logs
+RUN_DIR=/var/run/factory_fw
+PID_FILE=$RUN_DIR/rkaiq_3A_server.pid
+IQ_NAMES="imx678_OT01_40IRC_F16.json gc4663_CMK-OT2022-PX1_IR0147-50IRC-8M-F20.json"
+
+log()
+{
+	echo "[S40rkaiq_3A] $*" >> "$LOG_DIR/rkaiq_3A_server.log"
+}
+
+find_rkaiq_bin()
+{
+	if [ -x /oem/usr/bin/rkaiq_3A_server ]; then
+		echo /oem/usr/bin/rkaiq_3A_server
+	elif [ -x /usr/bin/rkaiq_3A_server ]; then
+		echo /usr/bin/rkaiq_3A_server
+	fi
+}
+
+find_iq_dir()
+{
+	if [ -d /oem/usr/iqfiles ]; then
+		echo /oem/usr/iqfiles
+	elif [ -d /etc/iqfiles ]; then
+		echo /etc/iqfiles
+	fi
+}
+
+cleanup_ipc()
+{
+	rm -f /tmp/aiq0.lock /tmp/aiq1.lock /tmp/.rkaiq_3A \
+		/tmp/rkaiq_* /tmp/*.rkaiq /var/tmp/rkipc 2>/dev/null || true
+	ipcrm -a >/dev/null 2>&1 || true
+}
+
+log_inputs()
+{
+	rkaiq_bin="$(find_rkaiq_bin)"
+	iq_dir="$(find_iq_dir)"
+	missing=""
+
+	[ -n "$rkaiq_bin" ] || missing="$missing rkaiq_bin"
+	[ -n "$iq_dir" ] || missing="$missing iq_dir"
+	if [ -n "$iq_dir" ]; then
+		for name in $IQ_NAMES; do
+			[ -f "$iq_dir/$name" ] || missing="$missing $iq_dir/$name"
+		done
+	fi
+	if [ -n "$missing" ]; then
+		log "input warning:$missing"
+	fi
+}
+
+wait_for_launch_files()
+{
+	timeout="${1:-20}"
+	while [ "$timeout" -gt 0 ]; do
+		rkaiq_bin="$(find_rkaiq_bin)"
+		iq_dir="$(find_iq_dir)"
+		if [ -n "$rkaiq_bin" ] && [ -n "$iq_dir" ]; then
+			return 0
+		fi
+		if [ "$timeout" = "20" ] || [ "$timeout" = "10" ] || [ "$timeout" = "1" ]; then
+			log "waiting launch files bin=${rkaiq_bin:-missing} iq=${iq_dir:-missing}"
+		fi
+		sleep 1
+		timeout=$((timeout - 1))
+	done
+	return 1
+}
+
+rkaiq_alive()
+{
+	pidof rkaiq_3A_server >/dev/null 2>&1
+}
+
+start_rkaiq()
+{
+	mkdir -p "$LOG_DIR" "$RUN_DIR" /var/tmp
+
+	: > "$LOG_DIR/rkaiq_3A_server.log"
+	wait_for_launch_files 20 || true
+	rkaiq_bin="$(find_rkaiq_bin)"
+	iq_dir="$(find_iq_dir)"
+	if [ -z "$rkaiq_bin" ]; then
+		log "rkaiq_3A_server not found"
+		return 0
+	fi
+	if [ -z "$iq_dir" ]; then
+		iq_dir=/etc/iqfiles
+	fi
+	log_inputs
+
+	if rkaiq_alive; then
+		killall rkaiq_3A_server >/dev/null 2>&1 || true
+		sleep 1
+	fi
+
+	for attempt in 1 2 3; do
+		cleanup_ipc
+		log "start attempt=$attempt $rkaiq_bin -a $iq_dir"
+		"$rkaiq_bin" -a "$iq_dir" >> "$LOG_DIR/rkaiq_3A_server.log" 2>&1 < /dev/null &
+		echo $! > "$PID_FILE"
+		sleep 3
+		if rkaiq_alive; then
+			log "running pid=$(cat "$PID_FILE" 2>/dev/null || true)"
+			return 0
+		fi
+		log "exited after attempt=$attempt"
+	done
+}
+
+stop_rkaiq()
+{
+	if [ -f "$PID_FILE" ]; then
+		pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+		if [ -n "$pid" ]; then
+			kill "$pid" >/dev/null 2>&1 || true
+		fi
+		rm -f "$PID_FILE"
+	fi
+	killall rkaiq_3A_server >/dev/null 2>&1 || true
+}
+
+case "$1" in
+	start|"")
+		start_rkaiq
+		;;
+	stop)
+		stop_rkaiq
+		;;
+	restart)
+		stop_rkaiq
+		sleep 1
+		start_rkaiq
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart}" >&2
+		exit 1
+		;;
+esac
+
+exit 0

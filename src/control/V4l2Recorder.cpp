@@ -25,6 +25,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <chrono>
 
 namespace ft {
 
@@ -115,6 +116,8 @@ bool V4l2Recorder::v4l2SetFormat(CameraWorker& w) {
     }
 
     if (w.mplane) {
+        w.cfg.width = fmt.fmt.pix_mp.width;
+        w.cfg.height = fmt.fmt.pix_mp.height;
         std::fprintf(stderr, "[v4l2] format set: %ux%u %c%c%c%c (sizeimage=%u, mplane)\n",
                      fmt.fmt.pix_mp.width, fmt.fmt.pix_mp.height,
                      (char)(fmt.fmt.pix_mp.pixelformat & 0xFF),
@@ -123,6 +126,8 @@ bool V4l2Recorder::v4l2SetFormat(CameraWorker& w) {
                      (char)((fmt.fmt.pix_mp.pixelformat >> 24) & 0xFF),
                      fmt.fmt.pix_mp.plane_fmt[0].sizeimage);
     } else {
+        w.cfg.width = fmt.fmt.pix.width;
+        w.cfg.height = fmt.fmt.pix.height;
         std::fprintf(stderr, "[v4l2] format set: %ux%u %c%c%c%c (sizeimage=%u)\n",
                      fmt.fmt.pix.width, fmt.fmt.pix.height,
                      (char)(fmt.fmt.pix.pixelformat & 0xFF),
@@ -282,7 +287,25 @@ bool V4l2Recorder::start(const RecorderCmd& /*cmd*/) {
                          m_workers[i]->cfg.device.c_str());
             // Stop any already-started cameras
             for (size_t j = 0; j < m_workers.size(); ++j) {
-                if (m_workers[j]->running) stopCamera(*m_workers[j], j == 0);
+                stopCamera(*m_workers[j], j == 0);
+            }
+            return false;
+        }
+    }
+
+    for (size_t i = 0; i < m_workers.size(); ++i) {
+        auto& w = *m_workers[i];
+        std::unique_lock<std::mutex> lock(w.stateMutex);
+        const bool signaled = w.stateCv.wait_for(
+            lock, std::chrono::seconds(5), [&w] { return w.ready || w.failed; });
+        if (!signaled || !w.ready) {
+            std::fprintf(stderr,
+                         "[v4l2] camera %s did not produce first encoded frame: %s\n",
+                         w.cfg.device.c_str(),
+                         w.failureReason.empty() ? (signaled ? "failed" : "timeout")
+                                                 : w.failureReason.c_str());
+            for (size_t j = 0; j < m_workers.size(); ++j) {
+                stopCamera(*m_workers[j], j == 0);
             }
             return false;
         }
@@ -352,6 +375,12 @@ static std::string generateOutputPath(const std::string& base_name) {
 
 bool V4l2Recorder::startCamera(CameraWorker& w, bool isFirst) {
     const auto& d = w.cfg.device;
+    {
+        std::lock_guard<std::mutex> lock(w.stateMutex);
+        w.ready = false;
+        w.failed = false;
+        w.failureReason.clear();
+    }
 
     // Generate unique output path for this recording session
     std::string output_path = generateOutputPath(w.cfg.output);
@@ -372,7 +401,13 @@ bool V4l2Recorder::startCamera(CameraWorker& w, bool isFirst) {
 
     w.hasAudio = isFirst && m_cfg.audio.enabled;
 
-    // Init platform-provided H.264 encoder.
+    // Open V4L2 device and set up streaming
+    if (!v4l2Open(d, w))   { stopCamera(w, isFirst); return false; }
+    if (!v4l2SetFormat(w)) { stopCamera(w, isFirst); return false; }
+    v4l2SetFps(w.fd, w.cfg.fps);      // best-effort, ignore failure
+
+    // Init platform-provided H.264 encoder after S_FMT, using the actual
+    // dimensions returned by the driver.
     {
         EncoderConfig enc_cfg;
         enc_cfg.width  = w.cfg.width;
@@ -380,17 +415,14 @@ bool V4l2Recorder::startCamera(CameraWorker& w, bool isFirst) {
         enc_cfg.fps    = w.cfg.fps;
         enc_cfg.bitrate_kbps = 2000;
         enc_cfg.gop    = 60;
+        std::fprintf(stderr, "[v4l2] init encoder for %s actual=%ux%u fps=%u\n",
+                     d.c_str(), enc_cfg.width, enc_cfg.height, enc_cfg.fps);
         if (!w.encoder || !w.encoder->init(enc_cfg)) {
             std::fprintf(stderr, "[v4l2] failed to init encoder for %s\n", d.c_str());
             stopCamera(w, isFirst);
             return false;
         }
     }
-
-    // Open V4L2 device and set up streaming
-    if (!v4l2Open(d, w))   { stopCamera(w, isFirst); return false; }
-    if (!v4l2SetFormat(w)) { stopCamera(w, isFirst); return false; }
-    v4l2SetFps(w.fd, w.cfg.fps);      // best-effort, ignore failure
     unsigned int type = bufType(w);
     if (!v4l2ReqBufs(w.fd, w.cfg.buffer_count, type))
                             { stopCamera(w, isFirst); return false; }
@@ -444,6 +476,23 @@ void V4l2Recorder::stopCamera(CameraWorker& w, bool isFirst) {
 // Capture loop (runs in dedicated thread)
 // ──────────────────────────────────────────────────────────────────────────────
 
+void V4l2Recorder::markCameraReady(CameraWorker& w) {
+    {
+        std::lock_guard<std::mutex> lock(w.stateMutex);
+        w.ready = true;
+    }
+    w.stateCv.notify_all();
+}
+
+void V4l2Recorder::markCameraFailed(CameraWorker& w, const char* reason) {
+    {
+        std::lock_guard<std::mutex> lock(w.stateMutex);
+        w.failed = true;
+        w.failureReason = reason ? reason : "failed";
+    }
+    w.stateCv.notify_all();
+}
+
 void V4l2Recorder::cameraLoop(CameraWorker& w) {
     const std::string& device = w.cfg.device;
     unsigned int type = bufType(w);
@@ -455,6 +504,7 @@ void V4l2Recorder::cameraLoop(CameraWorker& w) {
     auto bufs = mapBuffers(w.fd, w.cfg.buffer_count, type);
     if (bufs.empty()) {
         std::fprintf(stderr, "[v4l2] failed to map buffers for %s\n", device.c_str());
+        markCameraFailed(w, "map buffers failed");
         w.running = false;
         return;
     }
@@ -474,6 +524,7 @@ void V4l2Recorder::cameraLoop(CameraWorker& w) {
         if (::ioctl(w.fd, VIDIOC_QBUF, &buf) < 0) {
             std::fprintf(stderr, "[v4l2] VIDIOC_QBUF %d: %s\n", i, strerror(errno));
             unmapBuffers(bufs);
+            markCameraFailed(w, "initial QBUF failed");
             w.running = false;
             return;
         }
@@ -483,6 +534,7 @@ void V4l2Recorder::cameraLoop(CameraWorker& w) {
     if (!v4l2StreamOn(w.fd, type)) {
         std::fprintf(stderr, "[v4l2] STREAMON failed for %s\n", device.c_str());
         unmapBuffers(bufs);
+        markCameraFailed(w, "STREAMON failed");
         w.running = false;
         return;
     }
@@ -505,6 +557,7 @@ void V4l2Recorder::cameraLoop(CameraWorker& w) {
             if (errno == EINTR) continue;
             std::fprintf(stderr, "[v4l2] select error on %s: %s\n",
                          device.c_str(), strerror(errno));
+            markCameraFailed(w, "select failed");
             break;
         }
         if (ret == 0) continue;  // timeout, check w.running again
@@ -523,12 +576,14 @@ void V4l2Recorder::cameraLoop(CameraWorker& w) {
             if (errno == EAGAIN) continue;
             std::fprintf(stderr, "[v4l2] VIDIOC_DQBUF error on %s: %s\n",
                          device.c_str(), strerror(errno));
+            markCameraFailed(w, "DQBUF failed");
             break;
         }
 
         if (buf.index >= static_cast<unsigned int>(w.cfg.buffer_count)) {
             std::fprintf(stderr, "[v4l2] invalid buffer index %u on %s\n",
                          buf.index, device.c_str());
+            markCameraFailed(w, "invalid buffer index");
             break;
         }
 
@@ -577,6 +632,9 @@ void V4l2Recorder::cameraLoop(CameraWorker& w) {
                 uint64_t video_pts = static_cast<uint64_t>(captured) * Mp4Muxer::VIDEO_TIMESCALE / w.cfg.fps;
                 if (!w.muxer.addVideoFrame(enc_data, enc_size, video_pts, is_key)) {
                     std::fprintf(stderr, "[v4l2] muxer addVideoFrame failed on %s\n", device.c_str());
+                    markCameraFailed(w, "muxer add video failed");
+                } else {
+                    markCameraReady(w);
                 }
             } else {
                 std::fprintf(stderr, "[v4l2] encode failed on %s, frame dropped\n",

@@ -12417,7 +12417,7 @@
 							"stAuto":	{
 								"sta":	{
 									"psfParam":	{
-										"sw_cacT_psfMap_path":	"/oem/usr/conf/gc4663_CMK-OT2022-PX1_IR0147-50IRC-8M-F20/cac_map_hw_2560x1440.bin",
+										"sw_cacT_psfMap_path":	"/oem/usr/iqfiles/gc4663_CMK-OT2022-PX1_IR0147-50IRC-8M-F20/cac_map_hw_2560x1440.bin",
 										"hw_cacT_psfShift_bits":	2
 									},
 									"strgCenter":	{

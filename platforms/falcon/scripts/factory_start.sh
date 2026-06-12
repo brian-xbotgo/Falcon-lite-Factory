@@ -11,6 +11,7 @@ IQ_DIR="$USR_DIR/iqfiles"
 LOG_DIR="${FACTORY_LOG_DIR:-/userdata/logs}"
 RUN_DIR=/var/run/factory_fw
 FACTORY_FLAG=/userdata/factory_mode
+RKAIQ_IQ_NAMES="imx678_OT01_40IRC_F16.json gc4663_CMK-OT2022-PX1_IR0147-50IRC-8M-F20.json"
 
 export PATH="$BIN_DIR:/usr/bin:/usr/sbin:/bin:/sbin:$PATH"
 export LD_LIBRARY_PATH="$LIB_DIR:/usr/lib:/lib:${LD_LIBRARY_PATH:-}"
@@ -651,8 +652,42 @@ cleanup_rkaiq_ipc()
     ipcrm -a >/dev/null 2>&1 || true
 }
 
+log_rkaiq_inputs()
+{
+    missing=""
+    if [ ! -d "$IQ_DIR" ]; then
+        missing="$missing $IQ_DIR"
+    else
+        for name in $RKAIQ_IQ_NAMES; do
+            [ -f "$IQ_DIR/$name" ] || missing="$missing $IQ_DIR/$name"
+        done
+    fi
+    if [ -n "$missing" ]; then
+        log "rkaiq input warning:$missing"
+    fi
+}
+
+wait_rkaiq_launch_files()
+{
+    timeout="${1:-20}"
+    while [ "$timeout" -gt 0 ]; do
+        if [ -x "$BIN_DIR/rkaiq_3A_server" ] || command -v rkaiq_3A_server >/dev/null 2>&1; then
+            if [ -d "$IQ_DIR" ] || [ -d /etc/iqfiles ]; then
+                return 0
+            fi
+        fi
+        if [ "$timeout" = "20" ] || [ "$timeout" = "10" ] || [ "$timeout" = "1" ]; then
+            log "waiting rkaiq launch files"
+        fi
+        sleep 1
+        timeout=$((timeout - 1))
+    done
+    return 1
+}
+
 start_rkaiq()
 {
+    wait_rkaiq_launch_files 20 || true
     if [ -x "$BIN_DIR/rkaiq_3A_server" ]; then
         rkaiq_bin="$BIN_DIR/rkaiq_3A_server"
     elif command -v rkaiq_3A_server >/dev/null 2>&1; then
@@ -664,19 +699,26 @@ start_rkaiq()
 
     iq_dir="$IQ_DIR"
     [ -d "$iq_dir" ] || iq_dir=/etc/iqfiles
+    log_rkaiq_inputs
 
     if pidof rkaiq_3A_server >/dev/null 2>&1; then
-        log "restart rkaiq_3A_server with factory iq_dir=$iq_dir"
-        killall rkaiq_3A_server >/dev/null 2>&1 || true
-        sleep 1
+        log "rkaiq_3A_server already running"
+        return 0
     fi
 
-    cleanup_rkaiq_ipc
     : > "$LOG_DIR/rkaiq_3A_server.log" 2>/dev/null || true
-    log "start rkaiq_3A_server iq_dir=$iq_dir"
-    "$rkaiq_bin" -a "$iq_dir" >> "$LOG_DIR/rkaiq_3A_server.log" 2>&1 < /dev/null &
-    echo $! > "$RUN_DIR/rkaiq_3A_server.pid"
-    sleep 2
+    for attempt in 1 2 3; do
+        cleanup_rkaiq_ipc
+        log "start rkaiq_3A_server attempt=$attempt iq_dir=$iq_dir"
+        "$rkaiq_bin" -a "$iq_dir" >> "$LOG_DIR/rkaiq_3A_server.log" 2>&1 < /dev/null &
+        echo $! > "$RUN_DIR/rkaiq_3A_server.pid"
+        sleep 3
+        if pidof rkaiq_3A_server >/dev/null 2>&1; then
+            log "rkaiq_3A_server running"
+            return 0
+        fi
+        log "rkaiq_3A_server exited attempt=$attempt"
+    done
 }
 
 prepare_wifi_identity()
@@ -792,8 +834,8 @@ start_all()
     start_mqtt
     start_dbus
     start_nginx
-    start_rkaiq
     prepare_wifi_identity
+    start_rkaiq
     init_bluetooth
     init_wifi_ap
     start_factory_test

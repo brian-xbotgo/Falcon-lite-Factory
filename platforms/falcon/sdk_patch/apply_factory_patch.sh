@@ -135,6 +135,7 @@ apply_buildroot_patch()
     echo "[factory_patch] applying buildroot patch subset"
     copy_file "$buildroot_src/S01syslogd" "$SDK_ROOT/buildroot/output/rockchip_rk3576_ipc/target/etc/init.d/S01syslogd"
     copy_file "$buildroot_src/S01syslogd" "$SDK_ROOT/buildroot/package/busybox/S01syslogd"
+    copy_file "$buildroot_src/S40rkaiq_3A" "$SDK_ROOT/buildroot/output/rockchip_rk3576_ipc/target/etc/init.d/S40rkaiq_3A"
     copy_file "$buildroot_src/dragonfly-bt.patch" "$SDK_ROOT/buildroot/package/bluez5_utils/dragonfly-bt.patch"
     copy_file "$buildroot_src/post-build.sh" "$SDK_ROOT/buildroot/board/rockchip/common/post-build.sh"
 }

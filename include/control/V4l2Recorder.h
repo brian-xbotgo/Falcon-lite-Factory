@@ -10,6 +10,8 @@
 #include <atomic>
 #include <memory>
 #include <cstdio>
+#include <condition_variable>
+#include <mutex>
 
 // V4L2-based recorder — platform-independent video capture via Linux V4L2 API.
 // Supports multiple cameras simultaneously, each in its own thread.
@@ -45,6 +47,11 @@ private:
         std::unique_ptr<IEncoder> encoder;
         Mp4Muxer        muxer;            // replaces raw fwrite — writes .mp4
         bool            hasAudio = false;  // true for the first camera (binds audio)
+        std::mutex      stateMutex;
+        std::condition_variable stateCv;
+        bool            ready = false;
+        bool            failed = false;
+        std::string     failureReason;
     };
 
     // V4L2 buffer type — auto-selects single vs multi-plane per device
@@ -54,6 +61,8 @@ private:
     void cameraLoop(CameraWorker& w);
     void stopCamera(CameraWorker& w, bool isFirst);
     void audioLoop();  // audio capture + G.711A encode + muxer feed
+    static void markCameraReady(CameraWorker& w);
+    static void markCameraFailed(CameraWorker& w, const char* reason);
 
     // V4L2 low-level helpers
     static bool v4l2Open(const std::string& device, CameraWorker& w);

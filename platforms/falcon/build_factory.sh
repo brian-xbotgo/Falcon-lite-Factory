@@ -177,10 +177,12 @@ install_init_script()
     log "Installing factory init script into rootfs: $rootfs_dir"
     run_cmd mkdir -p "$rootfs_dir/etc/init.d"
     if [ "$SDK_DRY_RUN" = "1" ]; then
-        log "DRY-RUN install S90factory_fw to $rootfs_dir/etc/init.d"
+        log "DRY-RUN install factory init scripts to $rootfs_dir/etc/init.d"
     else
         cp -f "$SCRIPT_DIR/init.d/S90factory_fw" "$rootfs_dir/etc/init.d/"
         chmod 755 "$rootfs_dir/etc/init.d/S90factory_fw"
+        cp -f "$SCRIPT_DIR/sdk_patch/buildroot_patch/S40rkaiq_3A" "$rootfs_dir/etc/init.d/"
+        chmod 755 "$rootfs_dir/etc/init.d/S40rkaiq_3A"
     fi
     remove_conflicting_init_scripts "$rootfs_dir/etc/init.d"
 }
@@ -257,6 +259,8 @@ install_rootfs_overlay()
     else
         cp -f "$SCRIPT_DIR/init.d/S90factory_fw" "$overlay_dir/etc/init.d/"
         chmod 755 "$overlay_dir/etc/init.d/S90factory_fw"
+        cp -f "$SCRIPT_DIR/sdk_patch/buildroot_patch/S40rkaiq_3A" "$overlay_dir/etc/init.d/"
+        chmod 755 "$overlay_dir/etc/init.d/S40rkaiq_3A"
         if [ -f "$OUTPUT_DIR/adb_keys" ]; then
             cp -f "$OUTPUT_DIR/adb_keys" "$overlay_dir/adb_keys"
             chmod 644 "$overlay_dir/adb_keys"

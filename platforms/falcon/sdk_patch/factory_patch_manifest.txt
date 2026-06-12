@@ -27,6 +27,7 @@ kernel_patch/motor_tmi8152/motor_tmi8152.ko
 kernel_patch/om70x0x_battery/battery.ko
 
 buildroot_patch/S01syslogd
+buildroot_patch/S40rkaiq_3A
 buildroot_patch/dragonfly-bt.patch
 buildroot_patch/post-build.sh
 external/wpa_supplicant.conf

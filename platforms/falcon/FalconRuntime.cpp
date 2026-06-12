@@ -322,8 +322,7 @@ bool rkaiqLogHasFatalError()
 {
     const std::string log = readWholeFile("/userdata/logs/rkaiq_3A_server.log");
     return log.find("_rkAiqManager init error") != std::string::npos ||
-           log.find("Segmentation fault") != std::string::npos ||
-           log.find("access ") != std::string::npos;
+           log.find("Segmentation fault") != std::string::npos;
 }
 
 bool rkaiqProcessRunning()
@@ -355,6 +354,16 @@ bool waitReady(const std::vector<std::string>& devices, int timeoutMs)
 
     return !rkaiqLogHasFatalError() && rkaiqProcessRunning() &&
            videoNodesExist(devices) && stableChecks > 0;
+}
+
+void logRkaiqState(const std::vector<std::string>& devices)
+{
+    const bool running = rkaiqProcessRunning();
+    std::fprintf(stderr, "%s rkaiq state running=%d", kLogPrefix, running ? 1 : 0);
+    for (const auto& device : devices) {
+        std::fprintf(stderr, " %s=%d", device.c_str(), fileExists(device) ? 1 : 0);
+    }
+    std::fprintf(stderr, "\n");
 }
 
 } // namespace
@@ -413,16 +422,16 @@ bool ensureRkaiqStarted(const nlohmann::json& config, int timeoutMs)
                          kLogPrefix, iq.c_str());
             return true;
         }
-        std::fprintf(stderr, "%s restart unready rkaiq_3A_server iq_dir=%s\n",
+        logRkaiqState(devices);
+        std::fprintf(stderr, "%s keep running rkaiq_3A_server for diagnostics iq_dir=%s\n",
                      kLogPrefix, iq.c_str());
-        runShell("killall rkaiq_3A_server >/dev/null 2>&1");
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        return false;
     }
 
     cleanupRkaiqIpc();
     writeWholeFile("/userdata/logs/rkaiq_3A_server.log", "");
-    const std::string cmd = "nohup " + shellQuote(binary) + " -a " + shellQuote(iq) +
-        " >/userdata/logs/rkaiq_3A_server.log 2>&1 &";
+    const std::string cmd = shellQuote(binary) + " -a " + shellQuote(iq) +
+        " >/userdata/logs/rkaiq_3A_server.log 2>&1 < /dev/null &";
     std::fprintf(stderr, "%s start rkaiq cmd=%s\n", kLogPrefix, cmd.c_str());
     runShell(cmd);
 
@@ -459,7 +468,9 @@ bool waitRkaiqReady(const RecorderConfig& config, int timeoutMs)
 void prepareStartup(const nlohmann::json& config)
 {
     prepareWifiIdentity();
-    ensureRkaiqStarted(config, 15000);
+    if (!rkaiqProcessRunning()) {
+        ensureRkaiqStarted(config, 15000);
+    }
 }
 
 } // namespace ft::falcon_runtime
