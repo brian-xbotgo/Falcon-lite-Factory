@@ -1,3 +1,4 @@
+#include "FalconRuntime.h"
 #include "platforms/common/interface/IPlatform.h"
 #include "core/DriverRegistry.h"
 #include "platforms/common/SysfsGpioDriver.h"
@@ -16,6 +17,7 @@ class FalconPlatform : public IPlatform {
 public:
     bool init(const nlohmann::json& config) override {
         config_ = config;
+        falcon_runtime::prepareStartup(config_);
         return true;
     }
     const char* name() const override { return "falcon"; }

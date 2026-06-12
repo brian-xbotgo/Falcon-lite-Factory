@@ -672,10 +672,66 @@ start_rkaiq()
     fi
 
     cleanup_rkaiq_ipc
+    : > "$LOG_DIR/rkaiq_3A_server.log" 2>/dev/null || true
     log "start rkaiq_3A_server iq_dir=$iq_dir"
     "$rkaiq_bin" -a "$iq_dir" >> "$LOG_DIR/rkaiq_3A_server.log" 2>&1 < /dev/null &
     echo $! > "$RUN_DIR/rkaiq_3A_server.pid"
     sleep 2
+}
+
+prepare_wifi_identity()
+{
+    cpu_file=/userdata/cpuinfo.txt
+    serial=""
+
+    if [ -r /proc/cpuinfo ]; then
+        serial="$(awk '/Serial/ {print $NF; exit}' /proc/cpuinfo 2>/dev/null || true)"
+    fi
+    if [ -n "$serial" ]; then
+        if [ ! -f "$cpu_file" ] || [ "$(tr -d '\n\r' < "$cpu_file" 2>/dev/null)" != "$serial" ]; then
+            printf '%s\n' "$serial" > "$cpu_file" 2>/dev/null || true
+        fi
+    fi
+
+    if [ ! -s "$cpu_file" ]; then
+        log "cpuinfo.txt missing, keep default Wi-Fi/BLE identity"
+        return 0
+    fi
+    if ! command -v sha256sum >/dev/null 2>&1; then
+        log "sha256sum missing, keep default Wi-Fi/BLE identity"
+        return 0
+    fi
+
+    uuid="$(tr -d '\n\r' < "$cpu_file" | sha256sum | awk '{print $1}' | tail -c 6)"
+    [ -n "$uuid" ] || return 0
+    ssid="Xbt-F-$uuid"
+    password="$(printf '%s' "${ssid}DragonflySalt" | sha256sum | cut -c1-11)"
+    [ -n "$password" ] || return 0
+
+    cp -f "$CONF_DIR/wps_hostapd.conf" /tmp/wps_hostapd.conf 2>/dev/null || true
+    if [ ! -f /tmp/wps_hostapd.conf ]; then
+        {
+            echo "driver=nl80211"
+            echo "interface=wlan1"
+            echo "ssid=Xbt-F-000000"
+            echo "wpa=3"
+            echo "wpa_key_mgmt=WPA-PSK"
+            echo "wpa_pairwise=CCMP"
+            echo "wpa_passphrase=cd20d767bbe"
+            echo "rsn_pairwise=CCMP"
+        } > /tmp/wps_hostapd.conf
+    fi
+
+    sed -i "s#^ssid=.*#ssid=${ssid}#" /tmp/wps_hostapd.conf 2>/dev/null || true
+    if ! grep -q '^ssid=' /tmp/wps_hostapd.conf 2>/dev/null; then
+        echo "ssid=${ssid}" >> /tmp/wps_hostapd.conf
+    fi
+    sed -i "s#^wpa_passphrase=.*#wpa_passphrase=${password}#" /tmp/wps_hostapd.conf 2>/dev/null || true
+    if ! grep -q '^wpa_passphrase=' /tmp/wps_hostapd.conf 2>/dev/null; then
+        echo "wpa_passphrase=${password}" >> /tmp/wps_hostapd.conf
+    fi
+
+    log "Wi-Fi/BLE identity ssid=$ssid"
 }
 
 init_wifi_ap()
@@ -684,7 +740,7 @@ init_wifi_ap()
         return 0
     fi
 
-    cp -f "$CONF_DIR/wps_hostapd.conf" /tmp/wps_hostapd.conf 2>/dev/null || true
+    prepare_wifi_identity
     if command -v iw >/dev/null 2>&1 && ifconfig wlan0 >/dev/null 2>&1; then
         iw dev wlan0 interface add wlan1 type __ap 2>/dev/null || true
     fi
@@ -737,6 +793,7 @@ start_all()
     start_dbus
     start_nginx
     start_rkaiq
+    prepare_wifi_identity
     init_bluetooth
     init_wifi_ap
     start_factory_test

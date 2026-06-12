@@ -13,6 +13,7 @@ if(NOT TARGET factory_core)
 endif()
 
 set(FALCON_DRIVER_SRCS
+    FalconRuntime.cpp
     FalconPlatform.cpp
     drivers/RkMppEncoder.cpp
     drivers/Gc4663CameraDriver.cpp

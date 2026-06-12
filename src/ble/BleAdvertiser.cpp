@@ -16,7 +16,6 @@ namespace ft {
 
 namespace {
 
-constexpr const char* kFactoryAdvertisementName = "Xbt-F-000000";
 constexpr const char* kDefaultBluetoothInitCmd = "/oem/usr/scripts/factory_start.sh bluetooth";
 
 bool isValidSnText(const std::string& sn)
@@ -75,9 +74,6 @@ std::string currentFactorySn(BleAdvertiser* self)
 
 std::string currentBleName(BleAdvertiser* self)
 {
-    if (self->m_factoryMode) {
-        return kFactoryAdvertisementName;
-    }
     return self->m_deviceInfo.getBleName();
 }
 

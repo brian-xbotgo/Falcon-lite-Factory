@@ -1,14 +1,11 @@
 #include "drivers/Rk3576Recorder.h"
+#include "FalconRuntime.h"
 #include "drivers/RkMppEncoder.h"
 #include "control/V4l2Recorder.h"
 
 #include <cstdio>
-#include <cstdlib>
 #include <fstream>
 #include <nlohmann/json.hpp>
-#include <sys/wait.h>
-#include <thread>
-#include <chrono>
 
 namespace ft {
 
@@ -94,95 +91,6 @@ RecorderConfig loadRecorderConfig(const std::string& path)
     }
 }
 
-int runShell(const char* cmd)
-{
-    const int rc = std::system(cmd);
-    if (rc == -1) {
-        return -1;
-    }
-    if (WIFEXITED(rc)) {
-        return WEXITSTATUS(rc);
-    }
-    return rc;
-}
-
-const char* firstExistingPath(std::initializer_list<const char*> paths)
-{
-    for (const char* path : paths) {
-        std::ifstream f(path);
-        if (f.good()) {
-            return path;
-        }
-    }
-    return "";
-}
-
-void cleanupRkaiqIpc()
-{
-    runShell("rm -f /tmp/aiq0.lock /tmp/aiq1.lock /tmp/.rkaiq_3A /tmp/rkaiq_* "
-             "/tmp/*.rkaiq /var/tmp/rkipc 2>/dev/null");
-    runShell("ipcrm -a 2>/dev/null");
-}
-
-bool videoNodeReady(const std::string& node)
-{
-    const std::string cmd = "[ -e " + node + " ]";
-    return runShell(cmd.c_str()) == 0;
-}
-
-const char* factoryIqDir()
-{
-    const char* iqDir = firstExistingPath({
-        "/oem/usr/iqfiles",
-        "/etc/iqfiles",
-    });
-    return iqDir[0] != '\0' ? iqDir : "/etc/iqfiles";
-}
-
-void ensureRkaiqReady(const RecorderConfig& cfg)
-{
-    const char* rkaiq = firstExistingPath({
-        "/oem/usr/bin/rkaiq_3A_server",
-        "/usr/bin/rkaiq_3A_server",
-    });
-    if (rkaiq[0] == '\0') {
-        std::fprintf(stderr, "[Rk3576Recorder] rkaiq_3A_server not found\n");
-        return;
-    }
-
-    const char* iqDir = factoryIqDir();
-    if (runShell("pidof rkaiq_3A_server >/dev/null 2>&1") == 0) {
-        std::fprintf(stderr,
-                     "[Rk3576Recorder] restart rkaiq with factory iq_dir=%s\n",
-                     iqDir);
-        runShell("killall rkaiq_3A_server >/dev/null 2>&1");
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
-
-    cleanupRkaiqIpc();
-    std::string cmd = std::string("nohup ") + rkaiq + " -a " + iqDir +
-        " >/userdata/logs/rkaiq_3A_server.log 2>&1 &";
-    std::fprintf(stderr, "[Rk3576Recorder] start rkaiq cmd=%s\n", cmd.c_str());
-    runShell(cmd.c_str());
-
-    for (int i = 0; i < 30; ++i) {
-        bool allReady = true;
-        for (const auto& cam : cfg.cameras) {
-            if (!videoNodeReady(cam.device)) {
-                allReady = false;
-                break;
-            }
-        }
-        if (allReady && runShell("pidof rkaiq_3A_server >/dev/null 2>&1") == 0) {
-            std::fprintf(stderr, "[Rk3576Recorder] rkaiq ready\n");
-            return;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
-
-    std::fprintf(stderr, "[Rk3576Recorder] rkaiq readiness timed out\n");
-}
-
 } // namespace
 
 Rk3576Recorder::Rk3576Recorder()
@@ -197,7 +105,11 @@ Rk3576Recorder::~Rk3576Recorder() = default;
 bool Rk3576Recorder::start(const RecorderCmd& cmd)
 {
     if (!recorder_) return false;
-    ensureRkaiqReady(config_);
+    if (!falcon_runtime::waitRkaiqReady(config_, 3000)) {
+        std::fprintf(stderr,
+                     "[Rk3576Recorder] refuse recorder start: rkaiq not ready\n");
+        return false;
+    }
     return recorder_->start(cmd);
 }
 

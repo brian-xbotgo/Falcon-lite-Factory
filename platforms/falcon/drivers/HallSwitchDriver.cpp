@@ -294,11 +294,23 @@ bool HallSwitchDriver::initFalconHw()
         std::fprintf(stderr,
                      "[HallSwitch] Falcon HWv%d selected ADS1110\n",
                      hwVersion);
-        return initAds1110();
+        if (initAds1110()) {
+            return true;
+        }
+        std::fprintf(stderr,
+                     "[HallSwitch] Falcon HWv%d ADS1110 init failed path=/dev/i2c-%d addr=0x%02x\n",
+                     hwVersion, config_.bus, config_.addr);
+        return false;
     default:
         std::fprintf(stderr,
                      "[HallSwitch] Falcon HWv1.5/unknown selected ADS122U04\n");
-        return initAds122u04();
+        if (initAds122u04()) {
+            return true;
+        }
+        std::fprintf(stderr,
+                     "[HallSwitch] Falcon HWv1.5/unknown ADS122U04 init failed primary_uart=%s\n",
+                     config_.uartCandidates.empty() ? "<none>" : config_.uartCandidates.front().c_str());
+        return false;
     }
 }
 
